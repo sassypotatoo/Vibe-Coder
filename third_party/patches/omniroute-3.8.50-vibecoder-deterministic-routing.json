@@ -1,0 +1,65 @@
+{
+  "schema": 2,
+  "upstream": "OmniRoute",
+  "upstream_version": "3.8.50",
+  "upstream_archive_sha256": "1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7",
+  "license": "MIT",
+  "purpose": "Enforce VibeCoder's exact-model-only bundled runtime and expose a hash-pinned runtime attestation before inference.",
+  "patch_path": "third_party/patches/omniroute-3.8.50-vibecoder-deterministic-routing.patch",
+  "profile": {
+    "gateway_id": "omniroute",
+    "profile_id": "vibecoder-omniroute-exact-model-v1",
+    "profile_sha256": "aec0f63fb0dec08f24fffde9209504ec447e9428bec1cd64c033649ed275fe3d",
+    "exact_model_only": true,
+    "hidden_model_reroutes_disabled": true
+  },
+  "files": [
+    {
+      "target_path": "src/sse/handlers/chat.ts",
+      "required_upstream_sha256": "2ce947f589e0974dc8d2823669417b98f7e22500a1eb14f3bf36afc723957a12",
+      "expected_patched_sha256": "890b7756fa11e0686314d56252c0902a6cdde345680d5d6b12e8f0a81b90b588"
+    },
+    {
+      "target_path": "open-sse/handlers/chatCore.ts",
+      "required_upstream_sha256": "6416e58b28cf6ffc8722855f6e85daf04abe9d971a76d2afeaf58d14656bee97",
+      "expected_patched_sha256": "cfb885b8d215e85a5400b3c3ffadaaba0731464d6c82add9ba3c9d89b3876cff"
+    },
+    {
+      "target_path": "open-sse/services/emergencyFallback.ts",
+      "required_upstream_sha256": "f2a3a75dd63460f2448d17b871263135afaedcc758eca0000ae830226870325a",
+      "expected_patched_sha256": "b42f9a0e7c9de654f469b0214685a7fdb37093955d8513daa314aa094a57b864"
+    },
+    {
+      "target_path": "src/app/api/v1/vibecoder/runtime-profile/route.ts",
+      "required_upstream_sha256": null,
+      "expected_patched_sha256": "e425dc3e1beef5742cb345e9c959a1fe09c19edd96b362e6cac1a363e9950cdb"
+    }
+  ],
+  "enforcement": "required_for_vibecoder_bundled_runtime",
+  "feature_flag_cannot_reenable": true,
+  "deterministic_profile_complete": true,
+  "closed_model_mutation_paths": [
+    "no_thinking_alias",
+    "x_route_model_override",
+    "context_suffix_and_cc_alias",
+    "guardrail_model_reroute",
+    "pre_request_hook_model_override",
+    "task_aware_routing",
+    "web_search_route_override",
+    "reasoning_routing",
+    "auto_combo_and_safety_net_combo_resolution",
+    "connection_default_model_substitution",
+    "connection_reasoning_reroute",
+    "background_task_redirect",
+    "custom_model_alias",
+    "claude_effort_variant",
+    "model_family_fallbacks",
+    "emergency_budget_fallback"
+  ],
+  "allowed_same_model_behavior": [
+    "credential_refresh",
+    "same_provider_account_failover",
+    "request_retry_without_model_change"
+  ],
+  "remaining_runtime_routing_audit_required": []
+}

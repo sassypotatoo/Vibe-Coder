@@ -1,0 +1,172 @@
+name: Android diagnostic APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "android/**"
+      - "crates/vibecoder-android-host/**"
+      - "crates/vibecoder-runtime-packaging/**"
+      - "scripts/**"
+      - "config/android-*.json"
+      - ".github/workflows/android-diagnostic-apk.yml"
+  pull_request:
+    paths:
+      - "android/**"
+      - "crates/vibecoder-android-host/**"
+      - "crates/vibecoder-runtime-packaging/**"
+      - "scripts/build_android_host.sh"
+      - "scripts/build_android_shell.sh"
+      - "scripts/build_jcode_android.sh"
+      - "scripts/verify_jcode_android_source.sh"
+      - "scripts/verify_android_elf.py"
+      - "scripts/verify_android_diagnostic_apk.sh"
+      - "scripts/test_android_diagnostic_device.sh"
+      - "scripts/part31_build_and_verify.sh"
+      - "scripts/write_android_build_evidence.py"
+      - "scripts/validate_checkpoint.py"
+      - "config/android-runtime-inventory.json"
+      - "config/android-payload-provisioning.json"
+      - "config/android-diagnostic-signing.json"
+      - ".github/workflows/android-diagnostic-apk.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANDROID_PLATFORM: "36"
+  ANDROID_BUILD_TOOLS: "36.0.0"
+  ANDROID_NDK_VERSION: "28.2.13676358"
+  ANDROID_CMAKE_VERSION: "3.22.1"
+  VIBECODER_ANDROID_API: "29"
+
+jobs:
+  minimal-shell:
+    name: Minimal diagnostic APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4.0.1
+        with:
+          cmdline-tools-version: "15859902"
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install pinned Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: aarch64-linux-android
+
+      - uses: gradle/actions/setup-gradle@v6.2.0
+        with:
+          gradle-version: "9.5.0"
+          cache-provider: basic
+
+      - name: Validate source checkpoint
+        shell: bash
+        run: python3 scripts/validate_checkpoint.py
+
+      - name: Build and verify minimal APK
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          bash scripts/part31_build_and_verify.sh minimal
+
+      - name: Upload minimal APK + evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part31-minimal-diagnostic-apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/vibecoder-part31-build-evidence.json
+          if-no-files-found: error
+          retention-days: 7
+
+  jcode-android-proof-build:
+    name: Exact Jcode Android cross-compile + APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4.0.1
+        with:
+          cmdline-tools-version: "15859902"
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install pinned Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.91.0"
+          targets: aarch64-linux-android
+
+      - uses: gradle/actions/setup-gradle@v6.2.0
+        with:
+          gradle-version: "9.5.0"
+          cache-provider: basic
+
+      - name: Fetch and verify exact Jcode source
+        shell: bash
+        run: bash scripts/fetch_jcode_android_source.sh "${RUNNER_TEMP}/jcode-v0.73.0"
+
+      - name: Cross-compile Jcode for Android Bionic
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          export VIBECODER_JCODE_TARGET_DIR="${RUNNER_TEMP}/jcode-target"
+          bash scripts/build_jcode_android.sh "${RUNNER_TEMP}/jcode-v0.73.0"
+
+      - name: Validate source checkpoint
+        shell: bash
+        run: python3 scripts/validate_checkpoint.py
+
+      - name: Build and verify APK with packaged Jcode
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          bash scripts/part31_build_and_verify.sh jcode
+
+      - name: Upload Jcode diagnostic APK + evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part31-jcode-diagnostic-apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/vibecoder-part31-build-evidence.json
+          if-no-files-found: error
+          retention-days: 7

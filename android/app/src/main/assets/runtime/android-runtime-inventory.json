@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "target_os": "android",
+  "abi": "arm64-v8a",
+  "rust_target": "aarch64-linux-android",
+  "writable_app_home_exec_forbidden_from_target_api": 29,
+  "components": [
+    {
+      "component_id": "vibecoder_core",
+      "version_requirement": "0.1.0",
+      "artifact_kind": "in_process_native",
+      "placement": "apk_native_library",
+      "relative_path": "libvibecoder_android_host.so",
+      "required_for": [
+        "core"
+      ],
+      "requires_16k_page_compatibility": true,
+      "version_requirement_pinned": true
+    },
+    {
+      "component_id": "jcode",
+      "version_requirement": "0.73.0",
+      "artifact_kind": "native_executable",
+      "placement": "apk_native_executable",
+      "relative_path": "libvibecoder_jcode_exec.so",
+      "required_for": [
+        "agent"
+      ],
+      "requires_exec_probe": true,
+      "requires_version_probe": true,
+      "requires_unix_socket_probe": true,
+      "requires_16k_page_compatibility": true,
+      "version_requirement_pinned": true
+    },
+    {
+      "component_id": "node",
+      "version_requirement": "24.19.0",
+      "artifact_kind": "native_executable",
+      "placement": "apk_native_executable",
+      "relative_path": "libvibecoder_node_exec.so",
+      "required_for": [
+        "gateway",
+        "website_build"
+      ],
+      "requires_exec_probe": true,
+      "requires_version_probe": true,
+      "requires_16k_page_compatibility": true,
+      "version_requirement_pinned": true
+    },
+    {
+      "component_id": "omniroute",
+      "version_requirement": "3.8.50 + VibeCoder deterministic-routing patch",
+      "artifact_kind": "data_bundle",
+      "placement": "apk_asset",
+      "relative_path": "omniroute/bundle",
+      "required_for": [
+        "gateway"
+      ],
+      "requires_service_probe": true,
+      "version_requirement_pinned": true
+    },
+    {
+      "component_id": "npm_cli",
+      "version_requirement": "compatible with packaged Node runtime",
+      "artifact_kind": "data_bundle",
+      "placement": "apk_asset",
+      "relative_path": "node/npm",
+      "required_for": [
+        "website_build"
+      ],
+      "requires_runtime_binding_probe": true,
+      "version_requirement_pinned": false
+    },
+    {
+      "component_id": "java",
+      "version_requirement": "Android ARM64-compatible JDK; exact distribution/version not yet pinned",
+      "artifact_kind": "native_executable",
+      "placement": "apk_native_executable",
+      "relative_path": "libvibecoder_java_exec.so",
+      "required_for": [
+        "android_build"
+      ],
+      "requires_exec_probe": true,
+      "requires_version_probe": true,
+      "requires_16k_page_compatibility": true,
+      "version_requirement_pinned": false
+    },
+    {
+      "component_id": "gradle_launcher",
+      "version_requirement": "exact version to be pinned with Android build pipeline",
+      "artifact_kind": "java_archive",
+      "placement": "apk_asset",
+      "relative_path": "gradle/launcher.jar",
+      "required_for": [
+        "android_build"
+      ],
+      "version_requirement_pinned": false
+    },
+    {
+      "component_id": "android_platform",
+      "version_requirement": "platform android.jar matching chosen compileSdk; not yet pinned",
+      "artifact_kind": "data_bundle",
+      "placement": "apk_asset",
+      "relative_path": "android-sdk/platform/android.jar",
+      "required_for": [
+        "android_build"
+      ],
+      "version_requirement_pinned": false
+    },
+    {
+      "component_id": "aapt2",
+      "version_requirement": "Android ARM64-compatible build-tools binary; exact version not yet pinned",
+      "artifact_kind": "native_executable",
+      "placement": "apk_native_executable",
+      "relative_path": "libvibecoder_aapt2_exec.so",
+      "required_for": [
+        "android_build"
+      ],
+      "requires_exec_probe": true,
+      "requires_version_probe": true,
+      "requires_16k_page_compatibility": true,
+      "version_requirement_pinned": false
+    },
+    {
+      "component_id": "zipalign",
+      "version_requirement": "Android ARM64-compatible build-tools binary; exact version not yet pinned",
+      "artifact_kind": "native_executable",
+      "placement": "apk_native_executable",
+      "relative_path": "libvibecoder_zipalign_exec.so",
+      "required_for": [
+        "android_build"
+      ],
+      "requires_exec_probe": true,
+      "requires_version_probe": true,
+      "requires_16k_page_compatibility": true,
+      "version_requirement_pinned": false
+    },
+    {
+      "component_id": "d8_r8",
+      "version_requirement": "build-tools Java archive; exact version not yet pinned",
+      "artifact_kind": "java_archive",
+      "placement": "apk_asset",
+      "relative_path": "android-sdk/build-tools/d8-r8.jar",
+      "required_for": [
+        "android_build"
+      ],
+      "version_requirement_pinned": false
+    },
+    {
+      "component_id": "apksigner",
+      "version_requirement": "build-tools Java archive; exact version not yet pinned",
+      "artifact_kind": "java_archive",
+      "placement": "apk_asset",
+      "relative_path": "android-sdk/build-tools/apksigner.jar",
+      "required_for": [
+        "android_build"
+      ],
+      "version_requirement_pinned": false
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "VibeCoder Core",
+  "description": "Backend-first source for the private VibeCoder application. Features a Rust workspace with an Android shell host.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,15 @@
+[package]
+name = "vibecoder-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+vibecoder-agent-jcode = { path = "../vibecoder-agent-jcode" }
+vibecoder-domain = { path = "../vibecoder-domain" }
+vibecoder-gateway-omniroute = { path = "../vibecoder-gateway-omniroute" }
+vibecoder-routing = { path = "../vibecoder-routing" }
+vibecoder-secrets = { path = "../vibecoder-secrets" }
