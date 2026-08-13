@@ -1,0 +1,39 @@
+{
+  "bare_callback_helper_candidates": 0,
+  "baseline": "Part34.10.7 latest compiler + Node cpufeatures repair",
+  "baseline_validators_passed": true,
+  "checksum_entries_before_final_packaging": 251,
+  "compile_contract_errors_after_review": 0,
+  "compile_contract_heuristic_false_positives": [
+    "crates/vibecoder-agent-jcode/src/runtime.rs:.map(drop) uses Rust prelude drop"
+  ],
+  "compile_repair_regression_passed": true,
+  "conclusion": "source_audit_clean_external_recompile_required",
+  "current_runner_blockers": [
+    "cargo_missing",
+    "rustc_missing",
+    "android_sdk_missing",
+    "android_ndk_missing"
+  ],
+  "fresh_android_compile": false,
+  "fresh_rust_compile": false,
+  "jni_c_host_syntax_passed": true,
+  "json_toml_xml_yaml_parse_passed": true,
+  "known_upstream_node_warnings_suppressed": false,
+  "node_cpufeatures_generated_graph_ci_proven": false,
+  "node_cpufeatures_generated_graph_guard_added": true,
+  "node_cpufeatures_guard_contract": {
+    "host_source_matches_allowed": 0,
+    "required_exact_target_matches": 1,
+    "required_target_source": "sources/android/cpufeatures/cpu-features.c",
+    "runs_after_gyp_generation": true,
+    "runs_before_host_sanitizer_and_compile": true
+  },
+  "python_syntax_passed": true,
+  "schema": 1,
+  "shell_syntax_passed": true,
+  "step": "34.10.8-deep-source-audit",
+  "trait_method_import_regressions_found": 0,
+  "workspace_compile_contract_errors": 0,
+  "workspace_members_checked": 26
+}

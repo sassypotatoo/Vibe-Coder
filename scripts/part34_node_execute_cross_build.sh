@@ -31,9 +31,15 @@ else
   elif grep -q 'android_ndk_.*_compiler_missing:' "$EXECUTION_LOG"; then
     CLASSIFICATION="toolchain_incomplete"
     DETAIL="android_ndk_arm64_compiler_missing"
+  elif grep -Eq 'android_ndk_cpufeatures_(source|header)_missing:' "$EXECUTION_LOG"; then
+    CLASSIFICATION="toolchain_incomplete"
+    DETAIL="android_ndk_cpufeatures_missing"
   elif grep -Eq 'Could not resolve host|curl: \([0-9]+\)|Failed to connect|node_source_sha256_mismatch' "$EXECUTION_LOG"; then
     CLASSIFICATION="source_acquisition_failed"
     DETAIL="node_source_download_or_integrity_failure"
+  elif grep -q 'node_android_cpufeatures_patch_failed:' "$EXECUTION_LOG"; then
+    CLASSIFICATION="source_patch_failed"
+    DETAIL="node_android_zlib_cpufeatures_patch_failed"
   elif grep -q 'node_android_configure_failed:' "$EXECUTION_LOG"; then
     CLASSIFICATION="configure_failed"
     DETAIL="node_android_configure_failed"
@@ -43,6 +49,9 @@ else
   elif grep -Eq 'node_android_generated_makefile_(failed|missing)' "$EXECUTION_LOG"; then
     CLASSIFICATION="build_graph_generation_failed"
     DETAIL="node_android_generated_makefile_failed"
+  elif grep -q 'node_android_cpufeatures_generated_graph_invalid' "$EXECUTION_LOG"; then
+    CLASSIFICATION="build_graph_integration_invalid"
+    DETAIL="node_android_cpufeatures_generated_graph_invalid"
   elif grep -q 'node_android_host_makefile_sanitize_failed' "$EXECUTION_LOG"; then
     CLASSIFICATION="host_target_flag_sanitize_failed"
     DETAIL="node_android_host_makefile_sanitize_failed"

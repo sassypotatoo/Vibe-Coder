@@ -1,0 +1,60 @@
+{
+  "observed": {
+    "apk_produced": false,
+    "jcode_android_payload_aarch64_verified": true,
+    "jcode_android_payload_android_linker_verified": true,
+    "jcode_android_payload_built": true,
+    "jcode_job_post_payload_rust_failure_same_as_minimal": true,
+    "minimal_failure": {
+      "code": "E0425",
+      "crate": "vibecoder-process-local",
+      "detail": "undefined is_forbidden_control",
+      "line": 1460
+    },
+    "minimal_rust_compile_started": true,
+    "node_binary_produced": false,
+    "node_configure_verified": true,
+    "node_generated_makefile_verified": true,
+    "node_host_compile_count": 710,
+    "node_host_flag_sanitizer_verified": true,
+    "node_host_target_toolchain_split_preflight_verified": true,
+    "node_linker_failure": "undefined symbol android_getCpuFeatures",
+    "node_linker_reached": true,
+    "node_target_compile_count": 2099,
+    "part34_static_regressions_passed_before_compile": true,
+    "source_checkpoint_validation_passed_before_compile": true,
+    "strict_java_compile_passed": true,
+    "vibecoder_owned_warning": {
+      "crate": "vibecoder-gateway-omniroute",
+      "detail": "unused GatewayChatMessage import"
+    }
+  },
+  "post_fix_android_compile_pending": true,
+  "post_fix_compile_claim": false,
+  "repairs": {
+    "gateway_chat_message_import_moved_to_tests": true,
+    "node_cpufeatures_failure_classification_added": true,
+    "node_cpufeatures_ndk_source_header_fail_closed": true,
+    "node_zlib_ndk_cpufeatures_source_linkage_patch": true,
+    "runtime_service_control_predicate": "value.chars().any(char::is_control)"
+  },
+  "schema": 1,
+  "source": "uploaded GitHub Actions logs_86093908736.zip",
+  "step": "34.10.7-latest-compile-repair",
+  "warnings": {
+    "gradle_cache_path_warning_is_non_root_failure": true,
+    "node_observed_warning_categories": {
+      "c_only_visibility_inlines_hidden_flag_mismatch": 16,
+      "control_reaches_end_non_void": 3,
+      "icu_maybe_uninitialized": 1,
+      "icu_stringop_overflow": 2,
+      "openssl_or_api_deprecations": 94,
+      "sqlite_sign_compare": 1
+    },
+    "node_upstream_deprecation_and_cross_compile_warnings_suppressed": false,
+    "node_upstream_warnings_require_runtime_acceptance_evidence": true,
+    "node_warning_policy": "not_suppressed; retain until produced Android binary passes runtime/device acceptance",
+    "sdkmanager_deprecation_is_external_tooling_warning": true,
+    "vibecoder_owned_warning_repaired": true
+  }
+}

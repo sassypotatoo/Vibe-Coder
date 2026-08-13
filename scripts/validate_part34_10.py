@@ -22,6 +22,10 @@ cargo_lock=read(Path('Cargo.lock'))
 node_provision=read(Path('scripts/provision_node_android.sh'))
 node_split=read(Path('scripts/verify_node_android_toolchain_split.py'))
 node_sanitize=read(Path('scripts/sanitize_node_android_host_makefiles.py'))
+node_cpufeatures_patch=read(Path('scripts/patch_node_android_zlib_cpufeatures.py'))
+node_cpufeatures_graph=read(Path('scripts/verify_node_android_cpufeatures_integration.py'))
+process_local=read(Path('crates/vibecoder-process-local/src/lib.rs'))
+gateway_chat=read(Path('crates/vibecoder-gateway-omniroute/src/chat.rs'))
 omni_service=read(Path('crates/vibecoder-android-host/src/omniroute_service.rs'))
 compile_repairs=read(Path('scripts/test_part34_10_compile_repairs.py'))
 alpha_build=read(Path('scripts/part34_alpha_build_and_verify.sh'))
@@ -33,6 +37,8 @@ alpha_package_regression=read(Path('scripts/test_part34_10_alpha_package_tools.p
 provenance=json.loads(read(Path('third_party/provenance/omniroute-3.8.50-reviewed.json')))
 provisioning=json.loads(read(Path('config/android-payload-provisioning.json')))
 compile_audit=json.loads(read(Path('docs/evidence/part34_10_6_compile_log_audit.json')))
+latest_compile_audit=json.loads(read(Path('docs/evidence/part34_10_7_compile_log_audit.json')))
+deep_audit=json.loads(read(Path('docs/evidence/part34_10_8_deep_source_audit.json')))
 project=json.loads(read(Path('PROJECT_STATE.json')))['part34_10_alpha_mobile_ui']
 state=json.loads(read(Path('PART34_STATE.json')))['alpha_mobile_ui']
 
@@ -159,6 +165,15 @@ for overclaim in ('vibecoder_android_host_compile_passed','node_android_binary_b
     if observed.get(overclaim) is not False:
         raise SystemExit(f'Part 34.10 compile-log audit overclaim: {overclaim}')
 
+if latest_compile_audit.get('step') != '34.10.7-latest-compile-repair':
+    raise SystemExit('Part 34.10 latest compile audit step mismatch')
+if latest_compile_audit.get('observed',{}).get('node_linker_failure') != 'undefined symbol android_getCpuFeatures':
+    raise SystemExit('Part 34.10 latest Node linker failure evidence mismatch')
+if latest_compile_audit.get('repairs',{}).get('node_zlib_ndk_cpufeatures_source_linkage_patch') is not True:
+    raise SystemExit('Part 34.10 latest Node cpufeatures repair evidence missing')
+if latest_compile_audit.get('post_fix_compile_claim') is not False:
+    raise SystemExit('Part 34.10 latest compile audit overclaims post-fix compile')
+
 expected={
  'portrait_mobile_shell':True,'chat_tab':True,'preview_tab':True,'old_chat_drawer':True,
  'fake_sample_chats':False,'send_controller_jni_wired':True,'stop_controller_jni_wired':True,
@@ -185,17 +200,19 @@ for key in ('compile_log_repair_applied','vibecoder_core_tokio_direct_dependency
             'second_compile_attempt_analyzed','second_compile_failure_repaired_not_recompiled',
             'omniroute_process_runtime_trait_import_fixed','omniroute_last_profile_warning_removed',
             'node_generated_makefile_materialization_fixed','node_host_flag_sanitizer_after_gyp',
-            'omniroute_runtime_profile_hash_authority_repaired','part34_3_service_regression_in_ci'):
+            'omniroute_runtime_profile_hash_authority_repaired','part34_3_service_regression_in_ci',
+            'latest_compile_attempt_analyzed','process_runtime_control_predicate_compile_fixed',
+            'gateway_chat_test_only_import_warning_fixed','node_android_zlib_cpufeatures_linkage_fixed'):
     if project.get(key) is not True:
         raise SystemExit(f"Part 34.10 PROJECT_STATE compile repair flag missing: {key}")
 if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'second_compile_failures_repaired_recompile_pending':
-    raise SystemExit('Part 34.10 PROJECT_STATE compile repair status mismatch')
-if project.get('step') != '34.10.6-second-compile-deep-audit-repair':
-    raise SystemExit('Part 34.10 PROJECT_STATE compile repair step mismatch')
+if project.get('status') != 'deep_source_audit_clean_recompile_pending':
+    raise SystemExit('Part 34.10.8 PROJECT_STATE audit status mismatch')
+if project.get('step') != '34.10.8-deep-source-audit':
+    raise SystemExit('Part 34.10.8 PROJECT_STATE audit step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -224,17 +241,19 @@ for key in ('compile_log_repair_applied','vibecoder_core_tokio_direct_dependency
             'second_compile_attempt_analyzed','second_compile_failure_repaired_not_recompiled',
             'omniroute_process_runtime_trait_import_fixed','omniroute_last_profile_warning_removed',
             'node_generated_makefile_materialization_fixed','node_host_flag_sanitizer_after_gyp',
-            'omniroute_runtime_profile_hash_authority_repaired','part34_3_service_regression_in_ci'):
+            'omniroute_runtime_profile_hash_authority_repaired','part34_3_service_regression_in_ci',
+            'latest_compile_attempt_analyzed','process_runtime_control_predicate_compile_fixed',
+            'gateway_chat_test_only_import_warning_fixed','node_android_zlib_cpufeatures_linkage_fixed'):
     if state.get(key) is not True:
         raise SystemExit(f"Part 34.10 PART34_STATE compile repair flag missing: {key}")
 if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'second_compile_failures_repaired_recompile_pending':
-    raise SystemExit('Part 34.10 PART34_STATE compile repair status mismatch')
-if state.get('step') != '34.10.6-second-compile-deep-audit-repair':
-    raise SystemExit('Part 34.10 PART34_STATE compile repair step mismatch')
+if state.get('status') != 'deep_source_audit_clean_recompile_pending':
+    raise SystemExit('Part 34.10.8 PART34_STATE audit status mismatch')
+if state.get('step') != '34.10.8-deep-source-audit':
+    raise SystemExit('Part 34.10.8 PART34_STATE audit step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -270,9 +289,36 @@ for token in ('ProcessRuntime, ProcessTermination','self.process_runtime.cancel(
     need(omni_service, token, 'OmniRoute ProcessRuntime compile repair')
 if 'last_profile' in omni_service:
     raise SystemExit('Part 34.10 OmniRoute known unused last_profile warning regressed')
+if 'value.chars().any(char::is_control)' not in process_local or 'is_forbidden_control' in process_local:
+    raise SystemExit('Part 34.10 runtime-service control predicate compile repair regressed')
+if 'GatewayChatMessage' in gateway_chat.split('#[cfg(test)]',1)[0]:
+    raise SystemExit('Part 34.10 gateway test-only import warning regressed')
+for token in ('vibecoder-node-24.19.0-android-zlib-cpufeatures-v1',
+              '<(android_ndk_path)/sources/android/cpufeatures/cpu-features.c',
+              'node_android_cpufeatures_patch_already_applied'):
+    need(node_cpufeatures_patch, token, 'Node Android zlib cpufeatures linkage patch')
+for token in ('patch_node_android_zlib_cpufeatures.py', 'android_ndk_cpufeatures_source_missing:',
+              'node_android_cpufeatures_patch_failed:'):
+    need(node_provision, token, 'Node Android cpufeatures provision contract')
+for token in ('node_android_cpufeatures_generated_graph', 'cpufeatures_source_missing_from_target_graph',
+              'cpufeatures_source_leaked_into_host_graph', 'SOURCE_TOKEN'):
+    need(node_cpufeatures_graph, token, 'Node Android generated cpufeatures graph verifier')
+for token in ('verify_node_android_cpufeatures_integration.py', 'node_android_cpufeatures_generated_graph_invalid'):
+    need(node_provision, token, 'Node Android generated cpufeatures graph provision guard')
 for token in ('scripts/sanitize_node_android_host_makefiles.py',
               'python3 scripts/test_part34_3_service_tools.py',
               'python3 scripts/test_part34_10_compile_repairs.py'):
     need(workflow, token, 'deep-audit CI regression')
 
-print('Part 34.10.6 second compile-log deep-audit repair source validation PASSED')
+for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
+    for key in ('node_cpufeatures_generated_graph_guard_added','deep_source_compile_contract_audit_passed'):
+        if record.get(key) is not True:
+            raise SystemExit(f'Part 34.10.8 {label} deep-audit flag missing: {key}')
+    if record.get('node_cpufeatures_generated_graph_ci_proven') is not False:
+        raise SystemExit(f'Part 34.10.8 {label} overclaims cpufeatures graph CI proof')
+    if record.get('step') != '34.10.8-deep-source-audit':
+        raise SystemExit(f'Part 34.10.8 {label} step mismatch')
+if deep_audit.get('node_cpufeatures_generated_graph_guard_added') is not True or deep_audit.get('fresh_android_compile') is not False:
+    raise SystemExit('Part 34.10.8 deep source audit evidence mismatch')
+
+print('Part 34.10.8 deep source audit validation PASSED')

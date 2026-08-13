@@ -74,4 +74,81 @@ if provision.index('sanitize_node_android_host_makefiles.py') > provision.index(
 if 'node_android_host_makefile_sanitize_failed' not in provision: die('node_host_flag_sanitizer_not_fail_closed')
 if 'host_target_flag_sanitize_failed' not in wrapper: die('node_host_flag_sanitize_failure_classification_missing')
 
+# Latest CI Rust compile regression: runtime service arguments reject control characters with the
+# standard predicate; no orphan helper symbol may be referenced. GatewayChatMessage is test-only.
+process_local=(ROOT/'crates/vibecoder-process-local/src/lib.rs').read_text()
+if 'value.chars().any(char::is_control)' not in process_local: die('runtime_service_control_character_guard_missing')
+if 'is_forbidden_control' in process_local: die('undefined_is_forbidden_control_regression_present')
+gateway_chat=(ROOT/'crates/vibecoder-gateway-omniroute/src/chat.rs').read_text()
+production_head=gateway_chat.split('#[cfg(test)]',1)[0]
+if 'GatewayChatMessage' in production_head: die('gateway_chat_message_test_only_import_warning_regressed')
+if 'use vibecoder_gateway_contract::GatewayChatMessage;' not in gateway_chat: die('gateway_chat_message_test_import_missing')
+
+# Latest Node Android linker regression: Node 24.19.0's vendored zlib calls android_getCpuFeatures
+# under ARMV8_OS_ANDROID, so the NDK cpufeatures implementation must be added deterministically to
+# the zlib static library before GYP generates makefiles.
+cpupatch=ROOT/'scripts/patch_node_android_zlib_cpufeatures.py'
+with tempfile.TemporaryDirectory(prefix='vibecoder-node-cpufeatures-') as td:
+    node=Path(td)/'node'; target=node/'deps/zlib/zlib.gyp'; target.parent.mkdir(parents=True)
+    target.write_text("""{
+  'targets': [{
+    'target_name': 'zlib',
+    'conditions': [
+      ['OS==\"android\"', { 'defines': [ 'ARMV8_OS_ANDROID' ] }],
+            # Incorporate optimizations where possible.
+    ],
+  }],
+}
+""", encoding='utf-8')
+    result=subprocess.run([sys.executable,str(cpupatch),str(node)], text=True, capture_output=True)
+    if result.returncode: die('node_cpufeatures_patch_fixture_failed:'+result.stderr.strip())
+    patched=target.read_text(encoding='utf-8')
+    for token in ('vibecoder-node-24.19.0-android-zlib-cpufeatures-v1',
+                  '<(android_ndk_path)/sources/android/cpufeatures/cpu-features.c',
+                  '<(android_ndk_path)/sources/android/cpufeatures'):
+        if token not in patched: die('node_cpufeatures_patch_output_missing:'+token)
+    again=subprocess.run([sys.executable,str(cpupatch),str(node)], text=True, capture_output=True)
+    if again.returncode == 0 or 'node_android_cpufeatures_patch_already_applied' not in again.stderr:
+        die('node_cpufeatures_patch_double_apply_not_rejected')
+if 'patch_node_android_zlib_cpufeatures.py' not in provision: die('node_cpufeatures_patch_not_invoked')
+if provision.index('patch_node_android_zlib_cpufeatures.py') > provision.index('./android-configure "$NDK_ROOT" "$API" arm64'): die('node_cpufeatures_patch_runs_after_configure')
+for token in ('android_ndk_cpufeatures_source_missing:', 'android_ndk_cpufeatures_header_missing:',
+              'node_android_cpufeatures_patch_failed:'):
+    if token not in provision: die('node_cpufeatures_provision_guard_missing:'+token)
+if 'android_ndk_cpufeatures_missing' not in wrapper or 'node_android_zlib_cpufeatures_patch_failed' not in wrapper:
+    die('node_cpufeatures_failure_classification_missing')
+
+# Deep-audit hardening: prove the source-level zlib patch survived GYP generation before the expensive
+# compile starts. The generated graph must contain cpu-features.c in exactly one zlib target and in
+# zero host makefiles.
+graph_verify=ROOT/'scripts/verify_node_android_cpufeatures_integration.py'
+with tempfile.TemporaryDirectory(prefix='vibecoder-node-cpufeatures-graph-') as td:
+    out=Path(td)/'out'; out.mkdir()
+    target=out/'deps_zlib_zlib.target.mk'
+    host=out/'node_js2c.host.mk'
+    target.write_text("""# generated zlib target
+INCS := -I/ndk/sources/android/cpufeatures
+SRCS := /ndk/sources/android/cpufeatures/cpu-features.c
+""", encoding='utf-8')
+    host.write_text('# generated host target\n', encoding='utf-8')
+    result=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
+    if result.returncode: die('node_cpufeatures_generated_graph_fixture_failed:'+result.stderr.strip())
+    if 'node_android_cpufeatures_generated_graph' not in result.stdout: die('node_cpufeatures_generated_graph_evidence_missing')
+    host.write_text('/ndk/sources/android/cpufeatures/cpu-features.c\n', encoding='utf-8')
+    leaked=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
+    if leaked.returncode == 0 or 'cpufeatures_source_leaked_into_host_graph' not in leaked.stderr:
+        die('node_cpufeatures_host_graph_leak_not_rejected')
+    host.write_text('# clean host\n', encoding='utf-8')
+    target.write_text('# zlib target missing source\n', encoding='utf-8')
+    missing=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
+    if missing.returncode == 0 or 'cpufeatures_source_missing_from_target_graph' not in missing.stderr:
+        die('node_cpufeatures_missing_generated_target_not_rejected')
+if 'verify_node_android_cpufeatures_integration.py' not in provision: die('node_cpufeatures_generated_graph_verifier_not_invoked')
+graph_call='verify_node_android_cpufeatures_integration.py" "$WORK/out"'
+if graph_call not in provision: die('node_cpufeatures_generated_graph_verifier_wrong_root')
+if provision.index(graph_call) < provision.index('make -j1 V=1 PYTHON=python3 out/Makefile'): die('node_cpufeatures_graph_verified_before_gyp_generation')
+if provision.index(graph_call) > provision.index('sanitize_node_android_host_makefiles.py'): die('node_cpufeatures_graph_verified_after_host_sanitizer')
+if 'node_android_cpufeatures_generated_graph_invalid' not in provision: die('node_cpufeatures_generated_graph_fail_closed_missing')
+if 'build_graph_integration_invalid' not in wrapper: die('node_cpufeatures_generated_graph_failure_classification_missing')
+
 print('Part 34.10 compile-log repair regression PASSED')

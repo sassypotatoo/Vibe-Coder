@@ -50,6 +50,7 @@ on:
       - "scripts/verify_node_android_configure_output.py"
       - "scripts/verify_node_android_toolchain_split.py"
       - "scripts/sanitize_node_android_host_makefiles.py"
+      - "scripts/patch_node_android_zlib_cpufeatures.py"
       - "scripts/test_part34_10_compile_repairs.py"
       - "scripts/verify_jcode_android_source.sh"
       - "scripts/verify_android_elf.py"

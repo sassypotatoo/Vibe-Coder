@@ -3,7 +3,7 @@ use crate::client::{OmniRouteClient, RawGatewayResponse};
 use serde::{Deserialize, Serialize};
 use vibecoder_domain::{Result, TokenUsage, VibeCoderError};
 use vibecoder_gateway_contract::{
-    GatewayChatMessage, GatewayChatRequest, GatewayChatResponse, GatewayChatRole, GatewayCredential,
+    GatewayChatRequest, GatewayChatResponse, GatewayChatRole, GatewayCredential,
 };
 
 const MAX_MODEL_ID_BYTES: usize = 512;
@@ -244,6 +244,7 @@ fn gateway_error(code: &'static str) -> VibeCoderError {
 mod tests {
     use super::*;
     use vibecoder_domain::ModelRef;
+    use vibecoder_gateway_contract::GatewayChatMessage;
 
     fn request() -> GatewayChatRequest {
         GatewayChatRequest {

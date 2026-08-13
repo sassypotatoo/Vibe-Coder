@@ -4053,6 +4053,8 @@ def check_part34_2_node_staging_lane() -> None:
     cross_verify = read("scripts/verify_node_cross_build_evidence.py")
     configure_verify = read("scripts/verify_node_android_configure_output.py")
     toolchain_split_verify = read("scripts/verify_node_android_toolchain_split.py")
+    node_cpufeatures_patch = read("scripts/patch_node_android_zlib_cpufeatures.py")
+    node_cpufeatures_graph = read("scripts/verify_node_android_cpufeatures_integration.py")
     compile_repair_test = read("scripts/test_part34_10_compile_repairs.py")
     attempt_wrapper = read("scripts/part34_node_execute_cross_build.sh")
     attempt_writer = read("scripts/write_node_cross_build_attempt.py")
@@ -4089,6 +4091,12 @@ def check_part34_2_node_staging_lane() -> None:
         'aarch64-linux-android${API}-clang',
         'android_ndk_c_compiler_missing:',
         'android_ndk_cxx_compiler_missing:',
+        'android_ndk_cpufeatures_source_missing:',
+        'android_ndk_cpufeatures_header_missing:',
+        'patch_node_android_zlib_cpufeatures.py',
+        'node_android_cpufeatures_patch_failed:',
+        'verify_node_android_cpufeatures_integration.py',
+        'node_android_cpufeatures_generated_graph_invalid:',
         './android-configure "$NDK_ROOT" "$API" arm64',
         'verify_node_android_configure_output.py',
         'node_android_configure_output_invalid:',
@@ -4113,6 +4121,21 @@ def check_part34_2_node_staging_lane() -> None:
     ):
         if token not in provision:
             fail(f"Part 34.2 Node generated-staging/cross-build contract missing: {token}")
+    for token in (
+        "vibecoder-node-24.19.0-android-zlib-cpufeatures-v1",
+        "<(android_ndk_path)/sources/android/cpufeatures/cpu-features.c",
+        "node_android_cpufeatures_patch_already_applied",
+    ):
+        if token not in node_cpufeatures_patch:
+            fail(f"Part 34.2 Node Android cpufeatures patch contract missing: {token}")
+    for token in (
+        "node_android_cpufeatures_generated_graph",
+        "cpufeatures_source_missing_from_target_graph",
+        "cpufeatures_source_leaked_into_host_graph",
+        "SOURCE_TOKEN",
+    ):
+        if token not in node_cpufeatures_graph:
+            fail(f"Part 34.2 Node Android cpufeatures generated-graph contract missing: {token}")
 
     # Cross-build evidence is a source/toolchain/output identity record, never device evidence.
     for token in (
@@ -4169,7 +4192,10 @@ def check_part34_2_node_staging_lane() -> None:
     ):
         if token not in toolchain_split_verify:
             fail(f"Part 34.2.3 Node host/target toolchain verifier missing: {token}")
-    for token in ('vibecoder_core_tokio_direct_dependency_missing', 'old_android_compiler_for_obj_host_not_rejected'):
+    for token in ('vibecoder_core_tokio_direct_dependency_missing', 'old_android_compiler_for_obj_host_not_rejected',
+                  'undefined_is_forbidden_control_regression_present', 'node_cpufeatures_patch_fixture_failed',
+                  'node_cpufeatures_failure_classification_missing', 'node_cpufeatures_generated_graph_fixture_failed',
+                  'node_cpufeatures_host_graph_leak_not_rejected'):
         if token not in compile_repair_test:
             fail(f"Part 34.10 compile-log repair regression missing: {token}")
 

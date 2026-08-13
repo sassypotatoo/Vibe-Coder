@@ -1058,3 +1058,23 @@ Status: **SECOND COMPILE FAILURES REPAIRED; NEXT ANDROID RECOMPILE PENDING**
 - [ ] Third external Android CI compile has not yet been observed in this checkpoint.
 - [ ] Full Alpha APK package proof is not yet claimed.
 - [ ] Physical-device Alpha acceptance is not yet claimed.
+
+### Part 34.10.7 — Latest CI compiler/linker repair
+
+- [x] Latest clean-root CI crossed source/checksum validation and the strict Java gate.
+- [x] Jcode Android payload cross-build produced and verified an Android AArch64 payload before the workspace compile failed.
+- [x] Repaired workspace Rust E0425 in `vibecoder-process-local`: runtime-service arguments now use `char::is_control` directly.
+- [x] Removed the VibeCoder-owned `GatewayChatMessage` production unused-import warning by importing it only in tests.
+- [x] Node 24.19.0 cross-build reached the Android linker with verified host/target toolchain separation (710 host compiles, 2099 target compiles).
+- [x] Root Node linker failure identified: vendored zlib's Android CPU detector calls `android_getCpuFeatures`, while the NDK cpufeatures implementation was not linked into zlib.
+- [x] Added a deterministic post-integrity Node zlib GYP patch that includes the pinned NDK `sources/android/cpufeatures/cpu-features.c` implementation and include directory.
+- [x] Added fail-closed checks for the NDK cpufeatures source/header and regression coverage for patch ordering/double-application.
+- [ ] Post-repair Android CI recompile still required; no APK or Node binary success is claimed by this checkpoint.
+
+### Part 34.10.8 - deep source/compile-contract audit
+
+- [x] Re-ran the full Part 31 + Part 34.3-34.10 source/regression suite against the 34.10.7 baseline.
+- [x] Audited all 26 Rust workspace members for missing path dependencies, undeclared local-crate imports, missing modules/includes, feature mismatches, orphan callback helpers, and prior trait-import regression classes; no new source compile contract defect was found.
+- [x] Added `verify_node_android_cpufeatures_integration.py` after GYP generation and before compilation. It requires exactly one zlib Android target makefile to contain the NDK `cpu-features.c` source and rejects any host-makefile leakage.
+- [x] Added fail-closed regression coverage for missing target integration and host-graph leakage.
+- [ ] Fresh Rust/Android compile is not claimed in the audit runner because Cargo/Rust and Android SDK/NDK are unavailable here; GitHub CI remains the external compiler proof gate.

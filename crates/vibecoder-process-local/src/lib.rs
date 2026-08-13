@@ -1457,7 +1457,7 @@ fn validate_runtime_service_id(service_id: &str) -> Result<&str> {
 fn validate_runtime_service_arg(value: &str) -> Result<()> {
     if value.len() > MAX_RUNTIME_SERVICE_ARG_BYTES
         || value.as_bytes().contains(&0)
-        || value.chars().any(is_forbidden_control)
+        || value.chars().any(char::is_control)
     {
         return Err(process_error("process_runtime_service_arg_invalid"));
     }

@@ -43,6 +43,13 @@ NDK_AR="$NDK_TOOLCHAIN_BIN/llvm-ar"
 [[ -x "$NDK_CC" ]] || fail "android_ndk_c_compiler_missing:$NDK_CC"
 [[ -x "$NDK_CXX" ]] || fail "android_ndk_cxx_compiler_missing:$NDK_CXX"
 [[ -x "$NDK_AR" ]] || fail "android_ndk_ar_missing:$NDK_AR"
+NDK_CPUFEATURES_DIR="$NDK_ROOT/sources/android/cpufeatures"
+NDK_CPUFEATURES_SOURCE="$NDK_CPUFEATURES_DIR/cpu-features.c"
+NDK_CPUFEATURES_HEADER="$NDK_CPUFEATURES_DIR/cpu-features.h"
+[[ -f "$NDK_CPUFEATURES_SOURCE" && -s "$NDK_CPUFEATURES_SOURCE" ]] || \
+  fail "android_ndk_cpufeatures_source_missing:$NDK_CPUFEATURES_SOURCE"
+[[ -f "$NDK_CPUFEATURES_HEADER" && -s "$NDK_CPUFEATURES_HEADER" ]] || \
+  fail "android_ndk_cpufeatures_header_missing:$NDK_CPUFEATURES_HEADER"
 
 # Node's upstream Android configure helper intentionally exports CC/CXX as the Android target
 # compiler before invoking ./configure. GYP can consequently generate obj.host recipes that inherit
@@ -76,12 +83,18 @@ mkdir -p "$WORK"
 tar --extract --xz --file "$ARCHIVE" --directory "$WORK" --strip-components=1 --no-same-owner --no-same-permissions
 cd "$WORK"
 [[ -x ./android-configure ]] || fail "node_android_configure_missing"
+# The archive identity was verified before extraction. Apply the smallest deterministic Android
+# integration patch required by Node's vendored zlib: ARMV8_OS_ANDROID calls android_getCpuFeatures(),
+# whose implementation lives in the NDK's source-only cpufeatures module.
+python3 "$ROOT/scripts/patch_node_android_zlib_cpufeatures.py" "$WORK" \
+  | tee "$CONFIGURE_LOG" \
+  || fail "node_android_cpufeatures_patch_failed:log=${CONFIGURE_LOG}"
 
 # Node upstream still classifies Android as unsupported/experimental. This is therefore an evidence
 # build, not a readiness claim. Keep stdout/stderr so the first real compiler/linker failure can be
 # diagnosed instead of reduced to a generic CI red X.
 set +e
-./android-configure "$NDK_ROOT" "$API" arm64 2>&1 | tee "$CONFIGURE_LOG"
+./android-configure "$NDK_ROOT" "$API" arm64 2>&1 | tee -a "$CONFIGURE_LOG"
 CONFIGURE_STATUS=${PIPESTATUS[0]}
 set -e
 if (( CONFIGURE_STATUS != 0 )); then
@@ -105,6 +118,13 @@ if (( GENERATED_MAKEFILE_STATUS != 0 )); then
 fi
 [[ -f "$WORK/out/Makefile" && -s "$WORK/out/Makefile" ]] \
   || fail "node_android_generated_makefile_missing:log=${CONFIGURE_LOG}"
+
+# Source-level GYP patching is not proof that GYP accepted the integration. Before spending the
+# expensive compile, inspect the generated graph: exactly one Android zlib target must contain the
+# NDK cpu-features.c source, and no host recipe may contain it.
+python3 "$ROOT/scripts/verify_node_android_cpufeatures_integration.py" "$WORK/out" \
+  | tee -a "$CONFIGURE_LOG" \
+  || fail "node_android_cpufeatures_generated_graph_invalid:log=${CONFIGURE_LOG}"
 
 # The pinned build evidence proved one Android AArch64 target flag leaks into generated obj.host
 # recipes: -mbranch-protection=standard. Ubuntu's host g++ rejects that target-only option. Sanitize
