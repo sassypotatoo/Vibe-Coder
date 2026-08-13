@@ -4130,9 +4130,10 @@ def check_part34_2_node_staging_lane() -> None:
             fail(f"Part 34.2 Node Android cpufeatures patch contract missing: {token}")
     for token in (
         "node_android_cpufeatures_generated_graph",
-        "cpufeatures_source_missing_from_target_graph",
-        "cpufeatures_source_leaked_into_host_graph",
-        "SOURCE_TOKEN",
+        "cpufeatures_object_missing_from_target_graph",
+        "cpufeatures_object_leaked_into_host_graph",
+        "OBJECT_TOKEN",
+        "TARGET_RE",
     ):
         if token not in node_cpufeatures_graph:
             fail(f"Part 34.2 Node Android cpufeatures generated-graph contract missing: {token}")

@@ -1,0 +1,85 @@
+{
+  "capability_audit": {
+    "agent_jcode_action_controller_source_implemented": true,
+    "coding_agent_send_ui_wired": false,
+    "explicit_agent_loop_controller_source_implemented": true,
+    "full_chat_runtime_requires_node_and_omniroute_payloads": true,
+    "jcode_diagnostic_apk_is_full_alpha_apk": false,
+    "model_request_pipeline_source_wired": true,
+    "real_chat_interaction_source_wired": true
+  },
+  "current_ci_observations": {
+    "full_alpha_apk_built": false,
+    "jcode_android_arm64_build_passed": true,
+    "jcode_android_linker_compatible": true,
+    "jcode_apk_build_passed": true,
+    "jcode_apk_sha256": "85839d6f995364d52dc178666046c042e1e549f1e36aad3c403286969dd0c550",
+    "jcode_apk_verification_passed": true,
+    "jcode_artifact_id": 9199022996,
+    "minimal_apk_build_passed": true,
+    "minimal_apk_sha256": "ff19e67fcb8df615b9b3fdfba72bbc7f94db047cc15f1aac6bc88367b8e20235",
+    "minimal_apk_verification_passed": true,
+    "minimal_artifact_id": 9198386275,
+    "node_android_configure_passed": true,
+    "node_binary_built": false,
+    "node_failure_classification": "build_graph_integration_invalid",
+    "node_failure_message": "cpufeatures_source_missing_from_target_graph",
+    "node_generated_makefile_materialized": true,
+    "node_source_cpufeatures_patch_applied": true
+  },
+  "external_ci_recompile_required": true,
+  "post_fix_compile_claim": false,
+  "post_fix_validation": {
+    "compile_repair_regression_passed": true,
+    "current_runner_android_sdk_available": false,
+    "current_runner_rust_toolchain_available": false,
+    "fresh_android_compile_current_runner": false,
+    "fresh_rust_compile_current_runner": false,
+    "json_toml_xml_yaml_parse_passed": true,
+    "part31_checkpoint_validator_passed": true,
+    "part34_3_through_part34_10_9_validators_passed": true,
+    "part34_3_through_part34_10_regressions_passed": true,
+    "python_syntax_passed": true,
+    "shell_syntax_passed": true,
+    "strict_java_current_runner_blocker": "android_sdk_root_missing",
+    "strict_java_current_runner_executed": false
+  },
+  "repair": {
+    "graph_verifier_checks_object_token": true,
+    "graph_verifier_rejects_host_object_or_source_leak": true,
+    "graph_verifier_requires_cpufeatures_include_path": true,
+    "graph_verifier_requires_target_name_zlib": true,
+    "node_source_patch_unchanged": true,
+    "non_zlib_object_negative_regression_added": true,
+    "realistic_gyp_style_regression_fixture_added": true
+  },
+  "root_cause": {
+    "actual_gyp_make_graph_token": "sources/android/cpufeatures/cpu-features.o",
+    "classification": "verifier_false_negative_source_token_vs_gyp_object_token",
+    "gyp_behavior": "WriteSources maps compilable source paths through Target() to .o and writes OBJS into target makefiles",
+    "old_generated_graph_token": "sources/android/cpufeatures/cpu-features.c",
+    "upstream_node_gyp_make_generator_reviewed": true
+  },
+  "schema": 1,
+  "source_of_truth": "current uploaded Vibe-Coder-main.zip plus logs_86121711764.zip",
+  "step": "34.10.9-node-gyp-graph-verifier-repair",
+  "successful_lane_regression_protection": {
+    "android_chat_or_rust_core_modified": false,
+    "minimal_and_jcode_build_scripts_modified": false,
+    "protected_file_sha256": {
+      ".github/workflows/android-diagnostic-apk.yml": "5d130c98a98afb3ebaad146664cb3aad5b508262cd595cf29de5c53041dfa81c",
+      "android/app/src/main/java/com/vibecoder/shell/AlphaWorkspaceUi.java": "48c2b12a1d632beae950dd5e8df25475ce1624ede0717849a740d2cd5ac6a267",
+      "android/app/src/main/java/com/vibecoder/shell/MainActivity.java": "66afa9ac30a6af344db06aca59d4db8c3628b2ddea6f1320270594554a5a2444",
+      "android/app/src/main/java/com/vibecoder/shell/NativeBridge.java": "47ad1dc5a97b70770943c0565cf96904a2d2f2a0b10e8a4ec88b86d160ed50a3",
+      "crates/vibecoder-android-host/src/app_controller_ffi.rs": "a5da86618ef4146848bed288bb64dfca184f61aa878534baa3b681833f662f69",
+      "crates/vibecoder-core/src/lib.rs": "8cf8ad81eb46dbdb816a18493aaecc82fff3438b38991c7af921b1ea72b975cc",
+      "scripts/build_android_host.sh": "518629124b889b2be8ff530ed739a6e8849112e97ec46150bcb02d7cfe98cdae",
+      "scripts/build_android_shell.sh": "e5be14fbc80021fef74bacebac466528690fad18cb34e771f0fef5ce8762731a",
+      "scripts/build_jcode_android.sh": "c2c37e9c7f45c776869ac67f21c061f5fb01928392fecfeca2f94b9f811b337f",
+      "scripts/part31_build_and_verify.sh": "a387b1ce2fc6e61734ede811600fd36cd62e7413dd4976666db8ccf057c8f59c",
+      "scripts/verify_android_diagnostic_apk.sh": "f9feebc8d46e21969411a458c28603b4cd50dfc9e6f8f3e958e2a7caa2aa6048"
+    },
+    "third_party_jcode_tree_sha256": "1f8c6140f62f823ed546112072b296ffced12a0c684441104bdff269f54000d6",
+    "vendored_jcode_modified": false
+  }
+}

@@ -193,3 +193,31 @@ Warning triage from the second compile:
 This checkpoint does not claim that the third external Android CI compile has passed. It records
 source repairs and local regression/audit evidence only; full Alpha APK and physical-device proof
 remain evidence gates.
+
+## Part 34.10.9 — real CI evidence + Node GYP graph verifier repair
+
+The latest external CI run materially advanced the evidence boundary. The minimal diagnostic APK
+built and passed APK verification, and the exact Jcode 0.73.0 Android ARM64 payload again passed ELF
+and 16 KiB compatibility checks before the Jcode diagnostic APK built and passed APK verification.
+Those two successful build paths are preserved unchanged in this repair.
+
+The Node lane failed before compilation because the Part 34.10.8 generated-graph guard searched
+`*.target.mk` for the source token `sources/android/cpufeatures/cpu-features.c`. Inspection of Node
+v24.19.0's pinned GYP Make generator shows that compilable source paths are converted through
+`Target()` to `.o` paths and the generated target recipe records those paths in `OBJS`. The guard was
+therefore capable of rejecting a valid graph simply because it looked for a source filename that the
+Make generator does not retain there.
+
+The verifier now checks for `sources/android/cpufeatures/cpu-features.o`, requires that the matching
+recipe declares `TARGET := zlib`, still requires the cpufeatures include path, and rejects either the
+source or object token in host recipes. The regression fixture now mirrors the generated GYP Make
+shape and also proves that an object appearing under a non-zlib target is rejected. The source-level
+zlib cpufeatures patch itself is unchanged.
+
+A separate source-capability audit corrects an earlier diagnostic-APK interpretation: the current
+source already wires the Chat Send control into the JNI/Rust one-shot persisted model conversation,
+and the core already contains the Jcode coding-action and explicit-loop controllers. What remains
+false is automatic UI selection of the coding-action path. The downloaded Jcode diagnostic APK is
+not the full Alpha package: it proves Jcode packaging/execution compatibility but does not package the
+Node + OmniRoute runtime required by the real chat bootstrap. This checkpoint does not claim a Node
+binary or full Alpha APK until the repaired verifier and downstream build pass external CI.

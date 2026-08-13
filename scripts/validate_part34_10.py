@@ -39,6 +39,7 @@ provisioning=json.loads(read(Path('config/android-payload-provisioning.json')))
 compile_audit=json.loads(read(Path('docs/evidence/part34_10_6_compile_log_audit.json')))
 latest_compile_audit=json.loads(read(Path('docs/evidence/part34_10_7_compile_log_audit.json')))
 deep_audit=json.loads(read(Path('docs/evidence/part34_10_8_deep_source_audit.json')))
+graph_repair=json.loads(read(Path('docs/evidence/part34_10_9_node_gyp_graph_repair.json')))
 project=json.loads(read(Path('PROJECT_STATE.json')))['part34_10_alpha_mobile_ui']
 state=json.loads(read(Path('PART34_STATE.json')))['alpha_mobile_ui']
 
@@ -105,6 +106,12 @@ for token in (
     need(core, token, 'cancellable durable model turn')
 if 'tokio::select!' in core:
     raise SystemExit('Part 34.10 cancellable model turn unexpectedly requires tokio macros')
+
+for token in ('pub async fn run_persisted_conversation_turn(',
+              'pub async fn run_persisted_agent_action_turn(',
+              'pub async fn run_persisted_agent_action_turn_resolved<',
+              '.chat_completion(gateway_credential, &request)'):
+    need(core, token, 'real conversation / coding-agent source capability')
 
 need(strings, '<string name="app_name">VibeCoder</string>', 'app label')
 need(manifest, 'android:windowSoftInputMode="adjustResize"', 'IME resize boundary')
@@ -209,10 +216,10 @@ if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'deep_source_audit_clean_recompile_pending':
-    raise SystemExit('Part 34.10.8 PROJECT_STATE audit status mismatch')
-if project.get('step') != '34.10.8-deep-source-audit':
-    raise SystemExit('Part 34.10.8 PROJECT_STATE audit step mismatch')
+if project.get('status') != 'node_gyp_graph_verifier_repaired_recompile_pending':
+    raise SystemExit('Part 34.10.9 PROJECT_STATE repair status mismatch')
+if project.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
+    raise SystemExit('Part 34.10.9 PROJECT_STATE repair step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -250,10 +257,10 @@ if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'deep_source_audit_clean_recompile_pending':
-    raise SystemExit('Part 34.10.8 PART34_STATE audit status mismatch')
-if state.get('step') != '34.10.8-deep-source-audit':
-    raise SystemExit('Part 34.10.8 PART34_STATE audit step mismatch')
+if state.get('status') != 'node_gyp_graph_verifier_repaired_recompile_pending':
+    raise SystemExit('Part 34.10.9 PART34_STATE repair status mismatch')
+if state.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
+    raise SystemExit('Part 34.10.9 PART34_STATE repair step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -300,8 +307,8 @@ for token in ('vibecoder-node-24.19.0-android-zlib-cpufeatures-v1',
 for token in ('patch_node_android_zlib_cpufeatures.py', 'android_ndk_cpufeatures_source_missing:',
               'node_android_cpufeatures_patch_failed:'):
     need(node_provision, token, 'Node Android cpufeatures provision contract')
-for token in ('node_android_cpufeatures_generated_graph', 'cpufeatures_source_missing_from_target_graph',
-              'cpufeatures_source_leaked_into_host_graph', 'SOURCE_TOKEN'):
+for token in ('node_android_cpufeatures_generated_graph', 'cpufeatures_object_missing_from_target_graph',
+              'cpufeatures_object_leaked_into_host_graph', 'OBJECT_TOKEN', 'TARGET_RE'):
     need(node_cpufeatures_graph, token, 'Node Android generated cpufeatures graph verifier')
 for token in ('verify_node_android_cpufeatures_integration.py', 'node_android_cpufeatures_generated_graph_invalid'):
     need(node_provision, token, 'Node Android generated cpufeatures graph provision guard')
@@ -311,14 +318,42 @@ for token in ('scripts/sanitize_node_android_host_makefiles.py',
     need(workflow, token, 'deep-audit CI regression')
 
 for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
-    for key in ('node_cpufeatures_generated_graph_guard_added','deep_source_compile_contract_audit_passed'):
+    for key in ('node_cpufeatures_generated_graph_guard_added','deep_source_compile_contract_audit_passed',
+                'node_cpufeatures_generated_graph_false_negative_repaired',
+                'latest_ci_minimal_apk_proven','latest_ci_jcode_apk_proven',
+                'real_chat_interaction_source_wired','model_request_pipeline_source_wired',
+                'agent_action_controller_source_implemented'):
         if record.get(key) is not True:
-            raise SystemExit(f'Part 34.10.8 {label} deep-audit flag missing: {key}')
+            raise SystemExit(f'Part 34.10.9 {label} repair/evidence flag missing: {key}')
     if record.get('node_cpufeatures_generated_graph_ci_proven') is not False:
-        raise SystemExit(f'Part 34.10.8 {label} overclaims cpufeatures graph CI proof')
-    if record.get('step') != '34.10.8-deep-source-audit':
-        raise SystemExit(f'Part 34.10.8 {label} step mismatch')
+        raise SystemExit(f'Part 34.10.9 {label} overclaims repaired cpufeatures graph CI proof')
+    if record.get('coding_agent_send_ui_wired') is not False:
+        raise SystemExit(f'Part 34.10.9 {label} overclaims coding-agent UI dispatch')
+    if record.get('jcode_diagnostic_apk_full_chat_expected') is not False:
+        raise SystemExit(f'Part 34.10.9 {label} diagnostic APK/full Alpha boundary mismatch')
+    if record.get('node_cpufeatures_generated_graph_expected_object') != 'sources/android/cpufeatures/cpu-features.o':
+        raise SystemExit(f'Part 34.10.9 {label} generated graph object token mismatch')
+    if record.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
+        raise SystemExit(f'Part 34.10.9 {label} step mismatch')
 if deep_audit.get('node_cpufeatures_generated_graph_guard_added') is not True or deep_audit.get('fresh_android_compile') is not False:
-    raise SystemExit('Part 34.10.8 deep source audit evidence mismatch')
+    raise SystemExit('Part 34.10.8 historical deep source audit evidence mismatch')
+if graph_repair.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
+    raise SystemExit('Part 34.10.9 graph repair evidence identity mismatch')
+observed_349=graph_repair.get('current_ci_observations',{})
+if observed_349.get('minimal_apk_build_passed') is not True or observed_349.get('jcode_apk_build_passed') is not True:
+    raise SystemExit('Part 34.10.9 positive Minimal/Jcode CI evidence missing')
+if observed_349.get('node_failure_classification') != 'build_graph_integration_invalid':
+    raise SystemExit('Part 34.10.9 Node failure classification evidence mismatch')
+if graph_repair.get('root_cause',{}).get('actual_gyp_make_graph_token') != 'sources/android/cpufeatures/cpu-features.o':
+    raise SystemExit('Part 34.10.9 GYP object-token root cause evidence mismatch')
+if graph_repair.get('post_fix_compile_claim') is not False or graph_repair.get('external_ci_recompile_required') is not True:
+    raise SystemExit('Part 34.10.9 graph repair evidence overclaims external compile proof')
+capability=graph_repair.get('capability_audit',{})
+for key in ('real_chat_interaction_source_wired','model_request_pipeline_source_wired',
+            'agent_jcode_action_controller_source_implemented','explicit_agent_loop_controller_source_implemented'):
+    if capability.get(key) is not True:
+        raise SystemExit(f'Part 34.10.9 source capability evidence missing: {key}')
+if capability.get('coding_agent_send_ui_wired') is not False or capability.get('jcode_diagnostic_apk_is_full_alpha_apk') is not False:
+    raise SystemExit('Part 34.10.9 UI/package capability boundary overclaimed')
 
-print('Part 34.10.8 deep source audit validation PASSED')
+print('Part 34.10.9 Node GYP graph verifier repair validation PASSED')

@@ -119,30 +119,43 @@ if 'android_ndk_cpufeatures_missing' not in wrapper or 'node_android_zlib_cpufea
     die('node_cpufeatures_failure_classification_missing')
 
 # Deep-audit hardening: prove the source-level zlib patch survived GYP generation before the expensive
-# compile starts. The generated graph must contain cpu-features.c in exactly one zlib target and in
-# zero host makefiles.
+# compile starts. Node's Make GYP backend converts compilable source paths to object paths, so the
+# generated graph must contain cpu-features.o in exactly one TARGET := zlib recipe and in zero host
+# makefiles. A .c-token fixture would be unrealistic and can falsely reject a valid GYP graph.
 graph_verify=ROOT/'scripts/verify_node_android_cpufeatures_integration.py'
 with tempfile.TemporaryDirectory(prefix='vibecoder-node-cpufeatures-graph-') as td:
     out=Path(td)/'out'; out.mkdir()
     target=out/'deps_zlib_zlib.target.mk'
     host=out/'node_js2c.host.mk'
     target.write_text("""# generated zlib target
-INCS := -I/ndk/sources/android/cpufeatures
-SRCS := /ndk/sources/android/cpufeatures/cpu-features.c
+TOOLSET := target
+TARGET := zlib
+INCS_Release := -I/ndk/sources/android/cpufeatures
+OBJS := $(obj).target/zlib//ndk/sources/android/cpufeatures/cpu-features.o
 """, encoding='utf-8')
-    host.write_text('# generated host target\n', encoding='utf-8')
+    host.write_text('TOOLSET := host\nTARGET := node_js2c\n', encoding='utf-8')
     result=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
     if result.returncode: die('node_cpufeatures_generated_graph_fixture_failed:'+result.stderr.strip())
-    if 'node_android_cpufeatures_generated_graph' not in result.stdout: die('node_cpufeatures_generated_graph_evidence_missing')
-    host.write_text('/ndk/sources/android/cpufeatures/cpu-features.c\n', encoding='utf-8')
+    payload=json.loads(result.stdout.strip())
+    if payload.get('node_android_cpufeatures_generated_graph') != 'VERIFIED': die('node_cpufeatures_generated_graph_evidence_missing')
+    if not payload.get('object_token','').endswith('/cpu-features.o'): die('node_cpufeatures_generated_graph_object_evidence_missing')
+    host.write_text('TOOLSET := host\nTARGET := node_js2c\nOBJS := /ndk/sources/android/cpufeatures/cpu-features.o\n', encoding='utf-8')
     leaked=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
-    if leaked.returncode == 0 or 'cpufeatures_source_leaked_into_host_graph' not in leaked.stderr:
+    if leaked.returncode == 0 or 'cpufeatures_object_leaked_into_host_graph' not in leaked.stderr:
         die('node_cpufeatures_host_graph_leak_not_rejected')
-    host.write_text('# clean host\n', encoding='utf-8')
-    target.write_text('# zlib target missing source\n', encoding='utf-8')
+    host.write_text('TOOLSET := host\nTARGET := node_js2c\n', encoding='utf-8')
+    target.write_text('TOOLSET := target\nTARGET := zlib\n# zlib target missing cpufeatures object\n', encoding='utf-8')
     missing=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
-    if missing.returncode == 0 or 'cpufeatures_source_missing_from_target_graph' not in missing.stderr:
+    if missing.returncode == 0 or 'cpufeatures_object_missing_from_target_graph' not in missing.stderr:
         die('node_cpufeatures_missing_generated_target_not_rejected')
+    target.write_text("""TOOLSET := target
+TARGET := not_zlib
+INCS_Release := -I/ndk/sources/android/cpufeatures
+OBJS := /ndk/sources/android/cpufeatures/cpu-features.o
+""", encoding='utf-8')
+    wrong_target=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
+    if wrong_target.returncode == 0 or 'cpufeatures_object_in_non_zlib_target' not in wrong_target.stderr:
+        die('node_cpufeatures_non_zlib_target_not_rejected')
 if 'verify_node_android_cpufeatures_integration.py' not in provision: die('node_cpufeatures_generated_graph_verifier_not_invoked')
 graph_call='verify_node_android_cpufeatures_integration.py" "$WORK/out"'
 if graph_call not in provision: die('node_cpufeatures_generated_graph_verifier_wrong_root')
