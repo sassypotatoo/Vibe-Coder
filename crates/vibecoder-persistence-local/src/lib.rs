@@ -11,9 +11,10 @@ use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use vibecoder_domain::{ProjectId, Result, VibeCoderError};
+use vibecoder_domain::{ConversationId, ProjectId, Result, VibeCoderError};
 use vibecoder_persistence_contract::{
-    MAX_PERSISTED_PROJECTS, PersistedProjectState, PersistenceCapabilities, ProjectStateStore,
+    ConversationStore, MAX_PERSISTED_CONVERSATIONS_PER_PROJECT, MAX_PERSISTED_PROJECTS,
+    PersistedConversation, PersistedProjectState, PersistenceCapabilities, ProjectStateStore,
 };
 
 #[cfg(unix)]
@@ -22,6 +23,7 @@ mod unix_store;
 const PRODUCT_ROOT_NAME: &str = "vibecoder";
 const STATE_ROOT_NAME: &str = "state";
 const PROJECT_STATE_ROOT_NAME: &str = "projects";
+const CONVERSATION_STATE_ROOT_NAME: &str = "conversations";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalProjectStateConfig {
@@ -33,6 +35,7 @@ pub struct LocalProjectStateConfig {
 pub struct LocalProjectStateStore {
     app_private_root: PathBuf,
     project_state_root: PathBuf,
+    conversation_state_root: PathBuf,
     gate: Mutex<()>,
 }
 
@@ -56,20 +59,32 @@ impl LocalProjectStateStore {
             PROJECT_STATE_ROOT_NAME,
             "project_state_root_invalid",
         )?;
-        if !project_state_root.starts_with(&app_private_root) {
+        let conversation_state_root = create_or_verify_fixed_child(
+            &state_root,
+            CONVERSATION_STATE_ROOT_NAME,
+            "conversation_state_root_invalid",
+        )?;
+        if !project_state_root.starts_with(&app_private_root)
+            || !conversation_state_root.starts_with(&app_private_root)
+        {
             return Err(persistence_error(
-                "project_state_root_escaped_app_private_root",
+                "state_root_escaped_app_private_root",
             ));
         }
         Ok(Self {
             app_private_root,
             project_state_root,
+            conversation_state_root,
             gate: Mutex::new(()),
         })
     }
 
     pub fn project_state_root(&self) -> &Path {
         &self.project_state_root
+    }
+
+    pub fn conversation_state_root(&self) -> &Path {
+        &self.conversation_state_root
     }
 
     fn lock_gate(&self) -> Result<MutexGuard<'_, ()>> {
@@ -87,6 +102,8 @@ impl ProjectStateStore for LocalProjectStateStore {
             session_binding: true,
             model_preference: true,
             route_policy: true,
+            conversation_registry: true,
+            conversation_messages: true,
             atomic_replace: cfg!(unix),
             secrets_persisted: false,
         }
@@ -193,6 +210,150 @@ impl ProjectStateStore for LocalProjectStateStore {
     }
 }
 
+#[async_trait]
+impl ConversationStore for LocalProjectStateStore {
+    async fn create_conversation(&self, conversation: &PersistedConversation) -> Result<()> {
+        conversation.validate()?;
+        if conversation.revision != 0 {
+            return Err(persistence_error("conversation_create_revision_invalid"));
+        }
+        let _gate = self.lock_gate()?;
+        #[cfg(unix)]
+        {
+            if unix_store::load_conversation(
+                self,
+                conversation.project_id,
+                conversation.conversation_id,
+            )?
+            .is_some()
+            {
+                return Err(persistence_error("conversation_already_exists"));
+            }
+            #[cfg(any(target_os = "android", target_os = "linux"))]
+            if unix_store::list_conversation_ids(
+                self,
+                conversation.project_id,
+                MAX_PERSISTED_CONVERSATIONS_PER_PROJECT,
+            )?
+            .len()
+                >= MAX_PERSISTED_CONVERSATIONS_PER_PROJECT
+            {
+                return Err(persistence_error("conversation_limit_exceeded"));
+            }
+            return unix_store::save_conversation(self, conversation);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = conversation;
+            Err(persistence_error("secure_persistence_unsupported_platform"))
+        }
+    }
+
+    async fn update_conversation(
+        &self,
+        expected_revision: u64,
+        conversation: &PersistedConversation,
+    ) -> Result<PersistedConversation> {
+        conversation.validate()?;
+        if conversation.revision != expected_revision {
+            return Err(persistence_error("conversation_expected_revision_mismatch"));
+        }
+        let _gate = self.lock_gate()?;
+        #[cfg(unix)]
+        {
+            let current = unix_store::load_conversation(
+                self,
+                conversation.project_id,
+                conversation.conversation_id,
+            )?
+            .ok_or_else(|| persistence_error("conversation_not_found"))?;
+            if current.revision != expected_revision {
+                return Err(persistence_error("conversation_revision_conflict"));
+            }
+            let mut committed = conversation.clone();
+            committed.revision = expected_revision
+                .checked_add(1)
+                .ok_or_else(|| persistence_error("conversation_revision_overflow"))?;
+            unix_store::save_conversation(self, &committed)?;
+            return Ok(committed);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (expected_revision, conversation);
+            Err(persistence_error("secure_persistence_unsupported_platform"))
+        }
+    }
+
+    async fn load_conversation(
+        &self,
+        project_id: ProjectId,
+        conversation_id: ConversationId,
+    ) -> Result<Option<PersistedConversation>> {
+        let _gate = self.lock_gate()?;
+        #[cfg(unix)]
+        {
+            return unix_store::load_conversation(self, project_id, conversation_id);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (project_id, conversation_id);
+            Err(persistence_error("secure_persistence_unsupported_platform"))
+        }
+    }
+
+    async fn list_conversation_ids(
+        &self,
+        project_id: ProjectId,
+        max_conversations: usize,
+    ) -> Result<Vec<ConversationId>> {
+        if max_conversations == 0 || max_conversations > MAX_PERSISTED_CONVERSATIONS_PER_PROJECT {
+            return Err(persistence_error("conversation_list_limit_invalid"));
+        }
+        let _gate = self.lock_gate()?;
+        #[cfg(any(target_os = "android", target_os = "linux"))]
+        {
+            return unix_store::list_conversation_ids(self, project_id, max_conversations);
+        }
+        #[cfg(not(any(target_os = "android", target_os = "linux")))]
+        {
+            let _ = (project_id, max_conversations);
+            Err(persistence_error(
+                "secure_persistence_listing_unsupported_platform",
+            ))
+        }
+    }
+
+    async fn remove_conversation(
+        &self,
+        project_id: ProjectId,
+        conversation_id: ConversationId,
+    ) -> Result<()> {
+        let _gate = self.lock_gate()?;
+        #[cfg(unix)]
+        {
+            return unix_store::remove_conversation(self, project_id, conversation_id);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (project_id, conversation_id);
+            Err(persistence_error("secure_persistence_unsupported_platform"))
+        }
+    }
+
+    async fn remove_project_conversations(&self, project_id: ProjectId) -> Result<()> {
+        let _gate = self.lock_gate()?;
+        #[cfg(any(target_os = "android", target_os = "linux"))]
+        {
+            return unix_store::remove_project_conversations(self, project_id);
+        }
+        #[cfg(not(any(target_os = "android", target_os = "linux")))]
+        {
+            let _ = project_id;
+            Err(persistence_error("secure_persistence_unsupported_platform"))
+        }
+    }
+}
+
 fn canonical_existing_dir(path: &Path, code: &'static str) -> Result<PathBuf> {
     let canonical = fs::canonicalize(path).map_err(|_| persistence_error(code))?;
     let metadata = fs::metadata(&canonical).map_err(|_| persistence_error(code))?;
@@ -245,7 +406,10 @@ mod tests {
     use std::fs;
     use std::os::unix::fs::symlink;
     use uuid::Uuid;
-    use vibecoder_persistence_contract::PersistedProjectState;
+    use vibecoder_persistence_contract::{
+        ConversationRole, PersistedAgentSession, PersistedConversation, PersistedProjectState,
+    };
+    use vibecoder_domain::SessionId;
 
     fn temp_app_root(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
@@ -284,6 +448,54 @@ mod tests {
         fs::write(&outside, b"{}").unwrap();
         symlink(&outside, &state_path).unwrap();
         assert!(unix_store::load_project_state(&store, project_id).is_err());
+
+        let _ = fs::remove_dir_all(app_root);
+    }
+
+    #[test]
+    fn conversation_round_trip_is_project_scoped_and_aliases_fail_closed() {
+        let app_root = temp_app_root("conversation");
+        let store = LocalProjectStateStore::initialize(LocalProjectStateConfig {
+            app_private_dir: app_root.clone(),
+        })
+        .unwrap();
+        let project_id = ProjectId(Uuid::new_v4());
+        let conversation_id = ConversationId(Uuid::new_v4());
+        let mut conversation = PersistedConversation::pending_creation(conversation_id, project_id);
+        conversation.session_creation_pending = false;
+        conversation.agent_session = Some(PersistedAgentSession {
+            runtime_id: "jcode-harness".into(),
+            session_id: SessionId("safe-session".into()),
+            preferred_model: None,
+        });
+        conversation
+            .append_message(ConversationRole::User, "hello".into())
+            .unwrap();
+        conversation
+            .append_message(ConversationRole::Assistant, "hi".into())
+            .unwrap();
+        conversation.validate().unwrap();
+        unix_store::save_conversation(&store, &conversation).unwrap();
+        assert_eq!(
+            unix_store::load_conversation(&store, project_id, conversation_id).unwrap(),
+            Some(conversation.clone())
+        );
+        assert_eq!(
+            unix_store::list_conversation_ids(&store, project_id, 16).unwrap(),
+            vec![conversation_id]
+        );
+
+        let state_path = store.conversation_state_root().join(format!(
+            "{}--{}.json",
+            project_id.0.hyphenated(),
+            conversation_id.0.hyphenated()
+        ));
+        let hard_link = app_root.join("conversation-hard-link-alias");
+        fs::hard_link(&state_path, &hard_link).unwrap();
+        assert!(
+            unix_store::load_conversation(&store, project_id, conversation_id).is_err()
+        );
+        fs::remove_file(&hard_link).unwrap();
 
         let _ = fs::remove_dir_all(app_root);
     }

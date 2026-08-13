@@ -7,7 +7,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use vibecoder_domain::{ModelRef, Result};
+use vibecoder_domain::{ModelRef, Result, TokenUsage};
 
 pub const VIBECODER_OMNIROUTE_GATEWAY_ID: &str = "omniroute";
 pub const VIBECODER_OMNIROUTE_UPSTREAM_VERSION: &str = "3.8.50";
@@ -106,6 +106,43 @@ impl GatewayExecutionProfile {
     }
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GatewayChatRole {
+    System,
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayChatMessage {
+    pub role: GatewayChatRole,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayChatRequest {
+    /// Exact catalog model identity. The gateway must not silently substitute another model.
+    pub model: ModelRef,
+    pub messages: Vec<GatewayChatMessage>,
+    /// Explicit generation bound for the one-shot Part-34.5 request.
+    pub max_output_tokens: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayChatResponse {
+    pub requested_model_id: String,
+    /// Provider/gateway-reported model identity when present in the OpenAI-compatible response.
+    pub observed_model_id: Option<String>,
+    pub text: String,
+    pub finish_reason: Option<String>,
+    pub usage: Option<TokenUsage>,
+}
+
 #[async_trait]
 pub trait ModelGateway: Send + Sync {
     /// Fetch and validate the running gateway's execution-profile attestation. Static config or a
@@ -121,6 +158,14 @@ pub trait ModelGateway: Send + Sync {
     /// Return models usable for conversational/coding inference only. Specialty-only media,
     /// embedding, rerank, moderation, and similar entries must not leak into this catalog.
     async fn list_models(&self, credential: GatewayCredential<'_>) -> Result<Vec<ModelRef>>;
+
+    /// Send exactly one bounded non-streaming text-only inference request. Implementations must
+    /// not retry with another model, expose tool calls, or persist the borrowed credential.
+    async fn chat_completion(
+        &self,
+        credential: GatewayCredential<'_>,
+        request: &GatewayChatRequest,
+    ) -> Result<GatewayChatResponse>;
 }
 
 #[cfg(test)]

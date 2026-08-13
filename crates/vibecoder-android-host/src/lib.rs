@@ -6,6 +6,15 @@
 //! collection. A desktop build of this crate is useful for source tests, but it never counts as
 //! Android execution attestation.
 
+mod app_controller_ffi;
+mod gateway_transport;
+mod inference;
+mod omniroute_ffi;
+mod omniroute_service;
+pub use omniroute_service::{
+    OmniRouteRuntimeVerification, OmniRouteServiceHandle, OmniRouteServiceReadiness,
+};
+
 use serde::Serialize;
 use std::collections::HashMap;
 use std::ffi::CStr;
@@ -14,11 +23,13 @@ use std::future::Future;
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use vibecoder_agent_jcode::{JcodeConnectionConfig, JcodeConnectionMode};
+use vibecoder_agent_jcode::{
+    JcodeConnectionConfig, JcodeConnectionMode, JcodeModelGatewayBridge,
+};
 #[cfg(target_os = "android")]
 use vibecoder_agent_jcode::{JcodeAgentRuntime, JcodeConnectionState};
 use vibecoder_domain::{Result, VibeCoderError};
-use vibecoder_process_contract::ProcessRuntime;
+use vibecoder_process_contract::{ProcessExecutionOptions, ProcessId, ProcessRuntime, RunningProcess};
 use vibecoder_process_local::{LocalProcessRuntime, RuntimeToolSpec};
 use vibecoder_runtime_packaging::{
     AndroidArm64RuntimeInventory, AndroidRuntimeReadinessReport, RuntimeArtifactKind,
@@ -235,6 +246,7 @@ unsafe fn ffi_path(pointer: *const c_char) -> Result<PathBuf> {
 
 const JCODE_COMPONENT_ID: &str = "jcode";
 const NODE_COMPONENT_ID: &str = "node";
+const NODE_RUNTIME_SERVICE_ID: &str = "node-runtime";
 const JCODE_VERSION_ARGS: &[&str] = &["--version"];
 const NODE_VERSION_ARGS: &[&str] = &["--version"];
 const NATIVE_VERSION_PROBE_TIMEOUT_MS: u64 = 5_000;
@@ -414,6 +426,38 @@ impl AndroidHostRuntime {
         self.async_executor.clone()
     }
 
+    /// Start the package-installed Node runtime under the hardened local process supervisor.
+    ///
+    /// The executable must resolve from the package-owned runtime registry. Arguments are passed as
+    /// argv entries, never through a shell, and the child inherits no ambient environment. The
+    /// underlying supervisor provides bounded stdout/stderr capture, timeout, process-group
+    /// cancellation, and Android parent-death cleanup. Exactly one Node runtime service may be
+    /// active at a time; OmniRoute will build on this primitive in Part 34.3.
+    pub fn start_node_runtime(
+        &self,
+        args: &[String],
+        options: ProcessExecutionOptions,
+    ) -> Result<RunningProcess> {
+        self.native_component_path(NODE_COMPONENT_ID)?;
+        self.process_runtime.start_runtime_service(
+            NODE_RUNTIME_SERVICE_ID,
+            NODE_COMPONENT_ID,
+            args,
+            options,
+        )
+    }
+
+    pub fn node_runtime_active(&self) -> Result<bool> {
+        Ok(self
+            .process_runtime
+            .active_runtime_service(NODE_RUNTIME_SERVICE_ID)?
+            == 1)
+    }
+
+    pub fn cancel_node_runtime(&self, process_id: ProcessId) -> Result<()> {
+        self.process_runtime.cancel(process_id)
+    }
+
     pub fn native_component_path(&self, component_id: &str) -> Result<PathBuf> {
         let component = required_component(&self.inventory, component_id)?;
         if !matches!(
@@ -469,6 +513,9 @@ impl AndroidHostRuntime {
                 startup_timeout_ms: 30_000,
                 cleanup_timeout_ms: 30_000,
             },
+            model_gateway_bridge: Some(
+                JcodeModelGatewayBridge::VibeCoderOmniRouteLoopbackV1,
+            ),
             ..JcodeConnectionConfig::default()
         })
     }
@@ -792,6 +839,10 @@ mod tests {
         .expect("inventory");
         let host = AndroidHostRuntime::initialize(paths, inventory).expect("host");
         let config = host.jcode_connection_config().expect("Jcode config");
+        assert_eq!(
+            config.model_gateway_bridge,
+            Some(JcodeModelGatewayBridge::VibeCoderOmniRouteLoopbackV1)
+        );
         match config.connection {
             JcodeConnectionMode::Private { binary, .. } => {
                 assert_eq!(binary.as_deref(), Some(expected.as_path()));
@@ -808,6 +859,23 @@ mod tests {
             .block_on(async { Ok::<u32, VibeCoderError>(7) })
             .expect("async result");
         assert_eq!(value, 7);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn node_runtime_service_is_inactive_after_clean_host_initialization() {
+        let (root, app, native, exec) = temp_host_roots("node-runtime");
+        let inventory = AndroidArm64RuntimeInventory::from_json(include_bytes!(
+            "../../../config/android-runtime-inventory.json"
+        ))
+        .expect("inventory");
+        let host = AndroidHostRuntime::initialize(
+            AndroidHostPaths::new(&app, &native, &exec).expect("paths"),
+            inventory,
+        )
+        .expect("host");
+        assert!(!host.node_runtime_active().expect("node active state"));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

@@ -7,7 +7,7 @@ SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 BUILD_TOOLS_VERSION="${ANDROID_BUILD_TOOLS:-36.0.0}"
 EXPECTED_CERT_SHA256="9d73bfaeb16e706723bfc417ce43a9ed6b10286835e8a3050a8ddded67506445"
 fail() { printf 'verify_android_diagnostic_apk: %s\n' "$1" >&2; exit 1; }
-[[ "$MODE" == "minimal" || "$MODE" == "jcode" ]] || fail "mode_must_be_minimal_or_jcode"
+[[ "$MODE" == "minimal" || "$MODE" == "jcode" || "$MODE" == "node" || "$MODE" == "omniroute_asset" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" ]] || fail "mode_must_be_minimal_jcode_node_omniroute_asset_omniroute_service_omniroute_gateway_omniroute_inference_or_alpha"
 [[ -f "$APK" && -s "$APK" ]] || fail "apk_missing_or_empty:$APK"
 [[ -n "$SDK_ROOT" && -d "$SDK_ROOT" ]] || fail "android_sdk_root_missing"
 ZIPALIGN="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION/zipalign"
@@ -28,8 +28,11 @@ done
 for required in lib/arm64-v8a/libvibecoder_shell_jni.so lib/arm64-v8a/libvibecoder_android_host.so; do
   printf '%s\n' "${NATIVE_ENTRIES[@]}" | grep -Fxq "$required" || fail "required_native_entry_missing:$required"
 done
-if [[ "$MODE" == "jcode" ]]; then
+if [[ "$MODE" == "jcode" || "$MODE" == "alpha" ]]; then
   printf '%s\n' "${NATIVE_ENTRIES[@]}" | grep -Fxq 'lib/arm64-v8a/libvibecoder_jcode_exec.so' || fail "jcode_native_entry_missing"
+fi
+if [[ "$MODE" == "node" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" ]]; then
+  printf '%s\n' "${NATIVE_ENTRIES[@]}" | grep -Fxq 'lib/arm64-v8a/libvibecoder_node_exec.so' || fail "node_native_entry_missing"
 fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -42,5 +45,35 @@ for entry in "${NATIVE_ENTRIES[@]}"; do
       ;;
   esac
 done
+if [[ "$MODE" == "omniroute_asset" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" ]]; then
+  OMNI_TMP="$TMP/omniroute-bundle"
+  mkdir -p "$OMNI_TMP"
+  python3 - "$APK" "$OMNI_TMP" <<'PY'
+import pathlib, stat, sys, zipfile
+apk, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+prefix = 'assets/omniroute/bundle/'
+seen = 0
+with zipfile.ZipFile(apk) as z:
+    for info in z.infolist():
+        if not info.filename.startswith(prefix):
+            continue
+        rel = info.filename[len(prefix):]
+        if not rel or rel.endswith('/'):
+            continue
+        p = pathlib.PurePosixPath(rel)
+        if p.is_absolute() or '..' in p.parts or '.' in p.parts or '\\' in rel:
+            raise SystemExit(f'omniroute_apk_asset_unsafe_path:{rel}')
+        mode = (info.external_attr >> 16) & 0xFFFF
+        if stat.S_ISLNK(mode):
+            raise SystemExit(f'omniroute_apk_asset_symlink_forbidden:{rel}')
+        target = out.joinpath(*p.parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(z.read(info))
+        seen += 1
+if seen == 0:
+    raise SystemExit('omniroute_apk_asset_missing')
+PY
+  python3 "$ROOT/scripts/verify_omniroute_android_bundle.py" "$OMNI_TMP" >/dev/null || fail "omniroute_apk_asset_bundle_verification_failed"
+fi
 APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
 printf 'APK verification PASSED\nmode=%s\nsha256=%s\nsigning_certificate_sha256=%s\nfile=%s\n' "$MODE" "$APK_SHA256" "$CERT_SHA256" "$APK"

@@ -1,10 +1,11 @@
 use crate::catalog::{CatalogInterpretation, interpret_catalog_response};
+use crate::chat::execute_chat_completion;
 use crate::client::OmniRouteClient;
 use crate::profile::interpret_runtime_profile_response;
 use async_trait::async_trait;
 use vibecoder_domain::{ModelRef, Result, VibeCoderError};
 use vibecoder_gateway_contract::{
-    GatewayCredential, GatewayExecutionProfile, GatewayHealth, GatewayHealthStatus, ModelGateway,
+    GatewayChatRequest, GatewayChatResponse, GatewayCredential, GatewayExecutionProfile, GatewayHealth, GatewayHealthStatus, ModelGateway,
 };
 
 #[async_trait]
@@ -68,6 +69,14 @@ impl ModelGateway for OmniRouteClient {
                 Err(VibeCoderError::Gateway(code.into()))
             }
         }
+    }
+
+    async fn chat_completion(
+        &self,
+        credential: GatewayCredential<'_>,
+        request: &GatewayChatRequest,
+    ) -> Result<GatewayChatResponse> {
+        execute_chat_completion(self, credential, request).await
     }
 }
 

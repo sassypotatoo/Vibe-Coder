@@ -48,7 +48,26 @@
       "android_runtime_build_source": "exact_git_commit",
       "reviewed_archive_role": "vendored_public_boundary_provenance_only_not_android_runtime_binary_source",
       "android_runtime_target": "aarch64-linux-android",
-      "official_release_aarch64_linux_artifact_not_android_runtime_compatible_by_identity": true
+      "official_release_aarch64_linux_artifact_not_android_runtime_compatible_by_identity": true,
+      "reviewed_openai_compatible_local_endpoint_supported": true,
+      "reviewed_openai_compatible_api_base_env": "JCODE_OPENAI_COMPAT_API_BASE",
+      "reviewed_openai_compatible_local_enabled_env": "JCODE_OPENAI_COMPAT_LOCAL_ENABLED",
+      "reviewed_openai_compatible_no_auth_local_supported": true,
+      "reviewed_hidden_provider_fallback_disable_env": "JCODE_OPENROUTER_NO_FALLBACK",
+      "reviewed_tool_profile_env": "JCODE_TOOL_PROFILE",
+      "reviewed_minimal_tool_profile": [
+        "bash",
+        "read",
+        "write",
+        "edit",
+        "multiedit",
+        "apply_patch",
+        "patch",
+        "agentgrep",
+        "ls"
+      ],
+      "vibecoder_part34_7_tool_profile": "minimal_with_bash_disabled",
+      "vibecoder_part34_7_command_tools_enabled": false
     },
     {
       "name": "OmniRoute",

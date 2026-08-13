@@ -22,7 +22,7 @@ use vibecoder_domain::{
     SessionId, TurnResult, VibeCoderError,
 };
 use vibecoder_gateway_contract::{
-    GatewayCredential, GatewayExecutionProfile, GatewayHealth, GatewayHealthStatus, ModelGateway,
+    GatewayChatRequest, GatewayChatResponse, GatewayCredential, GatewayExecutionProfile, GatewayHealth, GatewayHealthStatus, ModelGateway,
 };
 use vibecoder_process_contract::{
     ProcessExecutionOptions, ProcessId, ProcessRuntime, ProcessRuntimeCapabilities, RunningProcess,
@@ -128,6 +128,16 @@ impl ModelGateway for FakeGateway {
     async fn list_models(&self, _credential: GatewayCredential<'_>) -> Result<Vec<ModelRef>> {
         self.calls.catalog.fetch_add(1, Ordering::SeqCst);
         Ok(self.catalog.clone())
+    }
+
+    async fn chat_completion(
+        &self,
+        _credential: GatewayCredential<'_>,
+        _request: &GatewayChatRequest,
+    ) -> Result<GatewayChatResponse> {
+        Err(VibeCoderError::Gateway(
+            "part24_fixture_inference_not_supported".into(),
+        ))
     }
 }
 

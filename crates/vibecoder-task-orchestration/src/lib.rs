@@ -170,6 +170,44 @@ impl BackendTaskStateMachine {
         Ok(true)
     }
 
+    /// Corroborate an agent catalog when the agent is itself an exact-id transport client of the
+    /// already-attested model gateway. Gateway `provider` metadata names the upstream owner, while
+    /// the agent runtime reports its local transport provider (for Jcode: `OpenAI-compatible`).
+    /// In this mode provider equality would be a category error, so require the exact model id plus
+    /// the independently attested transport-provider identity instead.
+    pub fn corroborate_bridged_agent_catalog(
+        &mut self,
+        catalog: &[ModelRef],
+        transport_provider: &str,
+    ) -> Result<bool> {
+        self.require_phase(BackendTaskPhase::Prepared)?;
+        require_provider(&self.selected_model, "gateway_model_provider_missing")?;
+        if transport_provider.is_empty()
+            || transport_provider.trim() != transport_provider
+            || transport_provider.chars().any(char::is_control)
+        {
+            return Err(task_error("agent_bridge_transport_provider_invalid"));
+        }
+        let mut seen = HashSet::new();
+        let mut exact = None;
+        for candidate in catalog {
+            if !seen.insert(candidate.id.as_str()) {
+                return Err(task_error("ambiguous_agent_catalog_model_id"));
+            }
+            if candidate.id == self.selected_model.id {
+                exact = Some(candidate);
+            }
+        }
+        let Some(candidate) = exact else {
+            return Ok(false);
+        };
+        if candidate.provider.as_deref() != Some(transport_provider) {
+            return Err(task_error("agent_bridge_transport_provider_mismatch"));
+        }
+        self.phase = BackendTaskPhase::AgentCatalogCorroborated;
+        Ok(true)
+    }
+
     pub fn corroborate_active_model(&mut self, active: &ModelRef) -> Result<()> {
         self.require_phase(BackendTaskPhase::AgentCatalogCorroborated)?;
         require_exact_identity(
@@ -425,6 +463,35 @@ mod tests {
                 .unwrap(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn bridged_catalog_uses_transport_provider_but_preserves_gateway_upstream_identity() {
+        let mut task = machine();
+        assert!(
+            task.corroborate_bridged_agent_catalog(
+                &[model("a/m", "OpenAI-compatible")],
+                "OpenAI-compatible",
+            )
+            .unwrap()
+        );
+        task.corroborate_active_model(&model("a/m", "a")).unwrap();
+        assert_eq!(task.phase(), BackendTaskPhase::ActiveModelCorroborated);
+    }
+
+    #[test]
+    fn bridged_catalog_rejects_wrong_transport_provider() {
+        let mut task = machine();
+        let error = task
+            .corroborate_bridged_agent_catalog(
+                &[model("a/m", "OpenAI-compatible")],
+                "Other-transport",
+            )
+            .expect_err("bridge transport mismatch must fail closed");
+        assert_eq!(
+            routing_error_code(error),
+            Some("agent_bridge_transport_provider_mismatch".into())
+        );
     }
 
     #[test]

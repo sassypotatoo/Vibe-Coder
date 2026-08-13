@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use futures_channel::oneshot;
 use std::path::Path;
 use std::sync::Arc;
-use vibecoder_agent_contract::{AgentRuntime, CreateSessionOptions, EventHandler, RunTurnOptions};
+use vibecoder_agent_contract::{AgentRuntime, CreateSessionOptions, EventHandler, ModelGatewayBridgeIdentity, RunTurnOptions};
 use vibecoder_domain::{
     ModelRef, PermissionDecision, ProjectRef, Result, RuntimeCapabilities, SessionId, TurnResult,
     VibeCoderError,
@@ -105,7 +105,15 @@ impl JcodeAgentRuntime {
                 .iter()
                 .any(|value| value == "permissions"),
             model_selection: self.models.is_verified(snapshot.generation),
-            file_tools: false,
+            // The pinned Jcode 0.73.0 harness advertises `session_files`, and the reviewed
+            // model-gateway bridge launch profile constrains its internal tool registry to the
+            // minimal file-editing profile with `bash` explicitly disabled. Do not make this
+            // assertion for arbitrary/unbridged Jcode runtimes.
+            file_tools: self.connection.config().model_gateway_bridge.is_some()
+                && identity
+                    .capabilities
+                    .iter()
+                    .any(|value| value == "session_files"),
             command_tools: false,
         }
     }
@@ -293,6 +301,14 @@ impl AgentRuntime for JcodeAgentRuntime {
             .status()
             .map(|snapshot| self.capabilities_from_snapshot(&snapshot))
             .unwrap_or_else(|_| RuntimeCapabilities::none())
+    }
+
+    fn model_gateway_bridge_identity(&self) -> Option<ModelGatewayBridgeIdentity> {
+        self.connection.config().model_gateway_bridge.map(|bridge| ModelGatewayBridgeIdentity {
+            gateway_id: bridge.gateway_id().to_string(),
+            transport_provider: bridge.transport_provider().to_string(),
+            exact_model_id_passthrough: true,
+        })
     }
 
     async fn ensure_ready(&self) -> Result<RuntimeCapabilities> {
@@ -527,10 +543,21 @@ impl AgentRuntime for JcodeAgentRuntime {
         self.ensure_bound_session_attached(session_id, &binding, generation)?;
         if let (Some(model), Some(catalog)) = (options.model.as_ref(), model_catalog.as_ref()) {
             self.connection.with_client(|client| {
-                select_model_from_catalog(client, session_id, model, catalog)
+                select_model_from_catalog(
+                    client,
+                    session_id,
+                    model,
+                    catalog,
+                    self.connection.config().model_gateway_transport_provider(),
+                )
             })?;
             let verification_client = self.open_fresh_model_client(session_id, &binding)?;
-            let _active_model = verify_active_model(&verification_client, session_id, model)?;
+            let _active_model = verify_active_model(
+                &verification_client,
+                session_id,
+                model,
+                self.connection.config().model_gateway_transport_provider(),
+            )?;
             self.verify_transport_generation(generation)?;
         }
 
@@ -557,6 +584,14 @@ impl AgentRuntime for JcodeAgentRuntime {
             permissions_supported,
             generation,
             Arc::clone(&self.permissions),
+            self.connection
+                .config()
+                .model_gateway_bridge
+                .map(|_| crate::VIBECODER_BRIDGED_MAX_TOOL_CALLS_PER_TURN),
+            self.connection
+                .config()
+                .model_gateway_bridge
+                .map(|_| crate::VIBECODER_BRIDGED_FILE_TOOLS),
         );
         let worker_registry = Arc::clone(&self.turns);
         let worker_generation = generation;
@@ -582,6 +617,16 @@ impl AgentRuntime for JcodeAgentRuntime {
         if safety_state.permission_protocol_failure() {
             return Err(VibeCoderError::Agent(
                 "Jcode permission protocol failed closed for this turn".into(),
+            ));
+        }
+        if safety_state.tool_limit_exceeded() {
+            return Err(VibeCoderError::Agent(
+                "Jcode bridged tool-call limit exceeded for this turn".into(),
+            ));
+        }
+        if safety_state.tool_policy_failure() {
+            return Err(VibeCoderError::Agent(
+                "Jcode bridged tool policy failed closed for this turn".into(),
             ));
         }
         match sdk_result {
@@ -754,9 +799,20 @@ impl AgentRuntime for JcodeAgentRuntime {
         drop(model_client);
         self.ensure_bound_session_attached(session_id, &binding, generation)?;
         self.connection
-            .with_client(|client| select_model_from_catalog(client, session_id, model, &catalog))?;
+            .with_client(|client| select_model_from_catalog(
+                client,
+                session_id,
+                model,
+                &catalog,
+                self.connection.config().model_gateway_transport_provider(),
+            ))?;
         let verification_client = self.open_fresh_model_client(session_id, &binding)?;
-        let active = verify_active_model(&verification_client, session_id, model)?;
+        let active = verify_active_model(
+                &verification_client,
+                session_id,
+                model,
+                self.connection.config().model_gateway_transport_provider(),
+            )?;
         self.verify_transport_generation(generation)?;
         Ok(active)
     }

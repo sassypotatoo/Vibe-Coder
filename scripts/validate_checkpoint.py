@@ -1069,13 +1069,13 @@ def check_model_mapping() -> None:
 
     if runtime.count("self.verify_transport_generation(generation)?") < 5:
         fail("model-sensitive paths do not recheck the owner generation after discovery/verification sidecars")
-    if runtime.count("verify_active_model(&verification_client, session_id, model)?;") < 2:
+    if runtime.count("verify_active_model(") < 2 or runtime.count("&verification_client,") < 2:
         fail("set/run model switches lack fresh post-switch sidecar corroboration")
     if "select_model_from_catalog(&model_client" in runtime:
         fail("model mutation is incorrectly sent through the discovery sidecar")
-    if runtime.count("self.connection.with_client(|client| {") < 2 or runtime.count("select_model_from_catalog(client, session_id") < 2:
+    if runtime.count("self.connection.with_client(|client|") < 2 or runtime.count("select_model_from_catalog(") < 2:
         fail("set/run model mutation is not performed on the manager-owned verified connection")
-    if "if let Some(model) = options.model.as_ref()" not in runtime or "select_model_from_catalog(client, session_id, model, catalog)" not in runtime:
+    if "if let (Some(model), Some(catalog)) = (options.model.as_ref(), model_catalog.as_ref())" not in runtime or "select_model_from_catalog(" not in runtime:
         fail("RunTurnOptions.model is not mapped before real turn execution")
     if "not atomic with session creation" not in runtime:
         fail("CreateSessionOptions.model is not explicitly rejected as non-atomic")
@@ -2693,7 +2693,7 @@ def check_backend_task_orchestration() -> None:
         fail("Part 23 agent contract lacks active model identity corroboration")
     for token in (
         "async fn corroborate_model_identity(",
-        "let active = verify_active_model(&verification_client, session_id, model)?;",
+        "let active = verify_active_model(",
         "self.verify_transport_generation(generation)?;",
         "Ok(active)",
     ):
@@ -3502,8 +3502,10 @@ def check_part28_android_shell() -> None:
     omni = payloads.get("omniroute", {})
     if omni.get("version") != "3.8.50" or omni.get("sha256") != EXPECTED_OMNIROUTE_ARCHIVE:
         fail("Part 28 OmniRoute reviewed archive identity drifted")
-    if omni.get("status") != "reviewed_archive_required_not_present":
-        fail("Part 28 OmniRoute must remain explicitly unmaterialized")
+    if omni.get("status") != "reviewed_source_verified_android_runtime_build_required":
+        fail("Part 28/34.3 OmniRoute status must distinguish reviewed source from unbuilt runtime bundle")
+    if omni.get("runtime_profile") != "config/omniroute-android-runtime-profile.json":
+        fail("Part 34.3 OmniRoute Android runtime profile reference missing")
 
     settings = read("android/settings.gradle.kts")
     root_gradle = read("android/build.gradle.kts")
@@ -3546,8 +3548,12 @@ def check_part28_android_shell() -> None:
         except Exception as exc:
             fail(f"Part 28 Android XML invalid: {xml_path.relative_to(ROOT)}: {exc}")
     manifest = read("android/app/src/main/AndroidManifest.xml")
-    if 'android:name="android.permission.INTERNET"' in manifest:
-        fail("Part 28 diagnostic shell must not add network authority yet")
+    # Part 28 originally forbade network authority. Part 34.4 intentionally adds only Android's
+    # INTERNET socket permission so the native client can reach the app-owned loopback gateway.
+    if manifest.count('android:name="android.permission.INTERNET"') != 1:
+        fail("Part 34.4 Android-local gateway requires exactly one INTERNET permission")
+    if 'android:usesCleartextTraffic=' in manifest or 'android:networkSecurityConfig=' in manifest:
+        fail("Part 34.4 must not globally relax Android cleartext/network-security policy")
     for token in (
         'android:name=".MainActivity"', 'android:exported="true"',
         'android.intent.action.MAIN', 'android.intent.category.LAUNCHER',
@@ -3756,8 +3762,8 @@ def check_part29_jcode_android_packaging() -> None:
     ):
         if token not in workflow:
             fail(f"Part 29 GitHub Actions Android proof contract missing: {token}")
-    if workflow.count('uses: dtolnay/rust-toolchain@1.88.0') != 1:
-        fail("Part 29 CI does not pin Rust 1.88.0 for the minimal lane")
+    if workflow.count('uses: dtolnay/rust-toolchain@1.88.0') != 2:
+        fail("Part 29/34 CI does not pin Rust 1.88.0 for exactly the minimal + Node lanes")
     if 'toolchain: "1.91.0"' not in workflow:
         fail("Part 29 CI does not pin Rust 1.91.0 for the Jcode lane")
     code_match = re.search(r"versionCode\s*=\s*(\d+)", app_gradle)
@@ -3823,7 +3829,7 @@ def check_part30_android_device_proof() -> None:
         'vibecoder-diagnostic-result.json',
         'report.put("part", 31)',
         'output.getFD().sync()',
-        'persistDiagnosticReport(buildDiagnosticReport(arm64, json, null))',
+        'persistDiagnosticReport(buildDiagnosticReport(',
     ):
         if token not in main_activity:
             fail(f"Part 30 diagnostic report contract missing: {token}")
@@ -3887,8 +3893,8 @@ def check_part31_first_android_apk() -> None:
     security = read("docs/SECURITY_INVARIANTS.md")
 
     # The reviewed command-line-tools identity must be the one CI actually installs.
-    if workflow.count('cmdline-tools-version: "15859902"') != 2:
-        fail("Part 31 CI does not pin command-line-tools 15859902 in both Android jobs")
+    if workflow.count('cmdline-tools-version: "15859902"') != 4:
+        fail("Part 31/34 CI does not pin command-line-tools 15859902 in all four Android build jobs")
     for token in (
         'accept-android-sdk-licenses: true',
         'log-accepted-android-sdk-licenses: false',
@@ -4004,7 +4010,7 @@ def check_part31_first_android_apk() -> None:
         haystack = app_gradle if token.startswith('jniLibs.') else (read("scripts/build_android_host.sh") + "\n" + read("scripts/build_jcode_android.sh") + "\n" + build_lane)
         if token not in haystack:
             fail(f"Part 31 generated JNI isolation contract missing: {token}")
-    for script_path in ("scripts/build_android_host.sh", "scripts/build_jcode_android.sh", "scripts/part31_build_and_verify.sh"):
+    for script_path in ("scripts/build_android_host.sh", "scripts/build_jcode_android.sh", "scripts/part31_build_and_verify.sh", "scripts/provision_node_android.sh"):
         if "android/app/src/main/jniLibs/arm64-v8a/libvibecoder_" in read(script_path):
             fail(f"Part 31 build output still mutates source JNI tree: {script_path}")
     for token in (
@@ -4036,6 +4042,274 @@ def check_part31_first_android_apk() -> None:
         if phrase not in security:
             fail(f"Part 31 security invariant missing: {phrase}")
 
+
+
+def check_part34_2_node_staging_lane() -> None:
+    provision = read("scripts/provision_node_android.sh")
+    apk_verify = read("scripts/verify_android_diagnostic_apk.sh")
+    build_lane = read("scripts/part34_node_build_and_verify.sh")
+    evidence = read("scripts/write_node_build_evidence.py")
+    cross_writer = read("scripts/write_node_cross_build_evidence.py")
+    cross_verify = read("scripts/verify_node_cross_build_evidence.py")
+    configure_verify = read("scripts/verify_node_android_configure_output.py")
+    attempt_wrapper = read("scripts/part34_node_execute_cross_build.sh")
+    attempt_writer = read("scripts/write_node_cross_build_attempt.py")
+    ndk_bootstrap = read("scripts/bootstrap_pinned_android_ndk_r28c.sh")
+    attempt_evidence = read("docs/evidence/part34_2_3_current_runner_execution.json")
+    attempt_log = read("docs/evidence/part34_2_3_current_runner_execution.log")
+    workflow = read(".github/workflows/android-diagnostic-apk.yml")
+    doc = read("docs/PART34_2_NODE_RUNTIME_AUDIT.md")
+    ledger = read("docs/PROGRESS_LEDGER.md")
+    state = json.loads(read("PROJECT_STATE.json"))
+
+    # Node runtime generation must never mutate source JNI/assets. npm is deliberately a later
+    # website-build capability and cannot be smuggled into the Node-only provisioning step.
+    for forbidden in (
+        "android/app/src/main/jniLibs",
+        "android/app/src/main/assets/node/npm",
+        "DEST_NPM=",
+        "cp -R deps/npm",
+    ):
+        if forbidden in provision:
+            fail(f"Part 34.2 Node provisioner still mutates/couples source authority: {forbidden}")
+    for token in (
+        'VERSION="24.19.0"',
+        'NDK_REVISION_REQUIRED="28.2.13676358"',
+        'DEST_NATIVE="$ROOT/android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so"',
+        'CONFIGURE_LOG="$OUTPUT_DIR/vibecoder-part34-node-configure.log"',
+        'BUILD_LOG="$OUTPUT_DIR/vibecoder-part34-node-make.log"',
+        'CROSS_EVIDENCE="$OUTPUT_DIR/vibecoder-part34-node-cross-build-evidence.json"',
+        'android_ndk_revision_mismatch:expected=',
+        'android_api_mismatch:expected=29:actual=',
+        'python_version_unsupported_by_node_android_configure',
+        'NDK_HOST_TAG="linux-x86_64"',
+        'NDK_HOST_TAG="darwin-x86_64"',
+        'aarch64-linux-android${API}-clang',
+        'android_ndk_c_compiler_missing:',
+        'android_ndk_cxx_compiler_missing:',
+        './android-configure "$NDK_ROOT" "$API" arm64',
+        'verify_node_android_configure_output.py',
+        'node_android_configure_output_invalid:',
+        'make -j"$JOBS"',
+        'node_android_configure_failed:status=',
+        'node_android_make_failed:status=',
+        'python3 "$ROOT/scripts/verify_android_elf.py" "$SOURCE"',
+        'python3 "$ROOT/scripts/verify_android_elf.py" "$DEST_NATIVE"',
+        'write_node_cross_build_evidence.py',
+        'node_android_elf_verification_failed',
+        'staged_node_android_elf_verification_failed',
+        'npm is a',
+    ):
+        if token not in provision:
+            fail(f"Part 34.2 Node generated-staging/cross-build contract missing: {token}")
+
+    # Cross-build evidence is a source/toolchain/output identity record, never device evidence.
+    for token in (
+        "EXPECTED_NODE_VERSION = '24.19.0'",
+        "EXPECTED_NODE_SOURCE_SHA256 = 'f6d95e10a0431ee1067fc6aabe9f762908b4716dd35324e1ddb4b1466b76659f'",
+        "EXPECTED_NDK_REVISION = '28.2.13676358'",
+        "'step': '34.2.3'",
+        "'claim': 'cross_build_candidate_only_not_device_execution'",
+        "'libc': 'bionic'",
+        "'device_execution_proven': False",
+        "'ndk_r28_or_newer_16k_default_expected_but_verified': True",
+        "'configure_sha256': sha256_file(configure_log)",
+        "'make_sha256': sha256_file(build_log)",
+        'verify_android_elf.py',
+        'os.replace(temp, output)',
+    ):
+        if token not in cross_writer:
+            fail(f"Part 34.2.3 Node cross-build evidence writer contract missing: {token}")
+    for token in (
+        "EXPECTED_NODE_VERSION = '24.19.0'",
+        "EXPECTED_NDK_REVISION = '28.2.13676358'",
+        "evidence.get('step') != '34.2.3'",
+        "cross_build_candidate_only_not_device_execution",
+        "info.get('output_sha256') != sha256_file(node)",
+        "node_bytes_elf_verification_failed",
+        "ROOT / 'scripts/verify_android_elf.py'",
+        "device_execution_claim_must_remain_false",
+        "target.get('api') != 29",
+        "android_ndk_revision_mismatch",
+        "elf_evidence_missing",
+    ):
+        if token not in cross_verify:
+            fail(f"Part 34.2.3 Node cross-build evidence verifier contract missing: {token}")
+
+    for token in (
+        'ast.literal_eval',
+        'config_gypi_missing_or_empty',
+        'makefile_missing_or_empty',
+        "variables.get('target_arch') != 'arm64'",
+        'node_target_type_unexpected',
+        "'node_android_configure_output': 'VERIFIED'",
+    ):
+        if token not in configure_verify:
+            fail(f"Part 34.2.3 Node configure-output verifier contract missing: {token}")
+
+    # APK verifier gains a Node mode without weakening the established minimal/Jcode requirements.
+    for token in (
+        '"$MODE" == "minimal" || "$MODE" == "jcode" || "$MODE" == "node"',
+        "lib/arm64-v8a/libvibecoder_jcode_exec.so",
+        "lib/arm64-v8a/libvibecoder_node_exec.so",
+        "node_native_entry_missing",
+        'verify_android_elf.py',
+    ):
+        if token not in apk_verify:
+            fail(f"Part 34.2 Node APK verifier contract missing: {token}")
+
+    for token in (
+        'node_payload_not_staged_run_scripts_provision_node_android_sh_first',
+        'node_cross_build_evidence_missing_run_scripts_provision_node_android_sh_first',
+        'verify_node_cross_build_evidence.py" "$NODE" "$CROSS_EVIDENCE"',
+        'rm -rf "$ROOT/android/app/build/generated/jniLibs"',
+        'bash "$ROOT/scripts/build_android_host.sh"',
+        'bash "$ROOT/scripts/build_android_shell.sh"',
+        'verify_android_diagnostic_apk.sh" "$APK" node',
+        'write_node_build_evidence.py" "$APK" "$CROSS_EVIDENCE" "$EVIDENCE"',
+        'vibecoder-part34-node-build-evidence.json',
+    ):
+        if token not in build_lane:
+            fail(f"Part 34.2 Node APK evidence lane missing: {token}")
+
+    for token in (
+        "'part': 34",
+        "'step': '34.2.3'",
+        "'mode': 'node'",
+        "'claim': 'apk_package_evidence_only_not_device_execution'",
+        "'version_requirement': '24.19.0'",
+        "'device_execution_proven': False",
+        "'cross_build_evidence_sha256': sha256_file(cross_build_evidence_path)",
+        "'cross_build_ndk_revision'",
+        "'cross_build_api'",
+        "cross_build_node_sha256_mismatch",
+        "cross_build_source_sha256_mismatch",
+        "cross_build_target_identity_mismatch",
+        "cross_build_android_api_mismatch",
+        "cross_build_android_ndk_revision_mismatch",
+        "cross_build_elf_evidence_missing",
+        "'node_provisioner_sha256'",
+        "'android_elf_verifier_sha256'",
+        'os.replace(temp, output)',
+    ):
+        if token not in evidence:
+            fail(f"Part 34.2 Node APK evidence contract missing: {token}")
+
+    # A real execution attempt must always leave a machine-readable result, including pre-configure
+    # environmental blockers. CI and local execution share this classifier.
+    for token in (
+        'bash "$ROOT/scripts/provision_node_android.sh"',
+        'CLASSIFICATION="toolchain_unavailable"',
+        'CLASSIFICATION="configure_failed"',
+        'CLASSIFICATION="compiler_or_linker_failed"',
+        'write_node_cross_build_attempt.py',
+        'exit "$STATUS"',
+    ):
+        if token not in attempt_wrapper:
+            fail(f"Part 34.2.3 Node execution-attempt wrapper contract missing: {token}")
+    for token in (
+        'EXPECTED_NODE_VERSION = "24.19.0"',
+        'EXPECTED_NDK_REVISION = "28.2.13676358"',
+        '"claim": "execution_attempt_only_not_binary_or_device_proof"',
+        '"binary_produced": status == "succeeded"',
+        '"apk_packaging_proven": False',
+        '"device_execution_proven": False',
+        'os.replace(temp, output)',
+    ):
+        if token not in attempt_writer:
+            fail(f"Part 34.2.3 Node execution-attempt evidence writer contract missing: {token}")
+    for token in (
+        'EXPECTED_REVISION="28.2.13676358"',
+        'EXPECTED_ARCHIVE_BYTES="722261334"',
+        'EXPECTED_ARCHIVE_SHA1="a7b54a5de87fecd125a17d54f73c446199e72a64"',
+        'archive_size_mismatch:',
+        'archive_sha1_mismatch',
+        'api29_arm64_clang_missing',
+    ):
+        if token not in ndk_bootstrap:
+            fail(f"Part 34.2.3 pinned NDK offline-bootstrap contract missing: {token}")
+    try:
+        local_attempt = json.loads(attempt_evidence)
+    except json.JSONDecodeError as exc:
+        fail(f"Part 34.2.3 local execution attempt evidence invalid JSON: {exc}")
+        local_attempt = {}
+    if local_attempt.get('step') != '34.2.3' or local_attempt.get('status') != 'failed':
+        fail("Part 34.2.3 local execution attempt identity/status mismatch")
+    if local_attempt.get('classification') != 'toolchain_unavailable' or local_attempt.get('detail') != 'android_ndk_root_missing':
+        fail("Part 34.2.3 local execution attempt blocker mismatch")
+    if local_attempt.get('binary_produced') is not False or local_attempt.get('apk_packaging_proven') is not False or local_attempt.get('device_execution_proven') is not False:
+        fail("Part 34.2.3 local execution attempt must not claim runtime proof")
+    if 'android_ndk_root_missing' not in attempt_log:
+        fail("Part 34.2.3 preserved local execution log missing actual blocker")
+    expected_attempt_log_sha = hashlib.sha256(attempt_log.encode('utf-8')).hexdigest()
+    if local_attempt.get('execution_log_sha256') != expected_attempt_log_sha:
+        fail("Part 34.2.3 preserved local execution log hash mismatch")
+
+    # CI must be capable of producing the first real compiler/linker evidence and preserving logs on
+    # failure. Keep it on the same project-wide NDK/API identity as the Android shell.
+    for token in (
+        'ANDROID_NDK_VERSION: "28.2.13676358"',
+        'VIBECODER_ANDROID_API: "29"',
+        'node-android-proof-build:',
+        'Exact Node 24.19.0 Android cross-compile + APK',
+        '- "scripts/part34_node_execute_cross_build.sh"',
+        '- "scripts/write_node_cross_build_attempt.py"',
+        '- "scripts/bootstrap_pinned_android_ndk_r28c.sh"',
+        'export VIBECODER_BUILD_JOBS="2"',
+        'bash scripts/part34_node_execute_cross_build.sh',
+        'bash scripts/part34_node_build_and_verify.sh',
+        'vibecoder-part34-node-execution-attempt.json',
+        'vibecoder-part34-node-execution.log',
+        'vibecoder-part34-node-cross-build-evidence.json',
+        'vibecoder-part34-node-configure.log',
+        'vibecoder-part34-node-make.log',
+        'name: vibecoder-part34-node-failure-logs',
+        'if: failure()',
+    ):
+        if token not in workflow:
+            fail(f"Part 34.2.3 Node CI execution contract missing: {token}")
+
+    part = state.get('part34_2_node_runtime', {})
+    expected = {
+        'node_version': '24.19.0',
+        'node_source_sha256': 'f6d95e10a0431ee1067fc6aabe9f762908b4716dd35324e1ddb4b1466b76659f',
+        'android_ndk_revision_required': '28.2.13676358',
+        'android_api': 29,
+        'android_abi': 'arm64-v8a',
+        'android_libc': 'bionic',
+        'source_generated_jni_staging_only': True,
+        'cross_build_evidence_writer_defined': True,
+        'cross_build_evidence_verifier_defined': True,
+        'apk_evidence_bound_to_cross_build_hash': True,
+        'ci_node_cross_build_job_defined': True,
+        'ci_failure_logs_preserved': True,
+        'cross_build_attempt_wrapper_defined': True,
+        'cross_build_attempt_evidence_writer_defined': True,
+        'offline_pinned_ndk_archive_bootstrap_defined': True,
+        'current_runner_cross_build_execution_attempted': True,
+        'current_runner_cross_build_execution_classification': 'toolchain_unavailable',
+        'current_runner_cross_build_execution_detail': 'android_ndk_root_missing',
+        'current_runner_execution_attempt_evidence_preserved': True,
+        'current_runner_cross_build_preflight_attempted': True,
+        'current_runner_cross_build_started_configure': False,
+        'current_runner_block_reason': 'android_ndk_missing_and_external_binary_download_unavailable',
+        'node_android_binary_built': False,
+        'node_apk_packaging_evidence_proven': False,
+        'physical_device_node_execution_proven': False,
+        'omniroute_touched': False,
+    }
+    for key, value in expected.items():
+        if part.get(key) != value:
+            fail(f"Part 34.2.3 Node state mismatch: {key}={part.get(key)!r}, expected {value!r}")
+
+    if "34.2.2" not in ledger or "generated Node staging" not in ledger:
+        fail("Part 34.2.2 progress-ledger checkpoint entry missing")
+    if "Part 34.2.2 implementation" not in doc:
+        fail("Part 34.2 audit document lacks 34.2.2 implementation follow-up")
+    if "Part 34.2.3 — exact Node Android cross-build execution lane" not in ledger:
+        fail("Part 34.2.3 progress-ledger checkpoint entry missing")
+    if "Part 34.2.3 implementation — reproducible cross-build execution/evidence lane" not in doc:
+        fail("Part 34.2 audit document lacks 34.2.3 execution follow-up")
 
 def check_part31_review_fixes() -> None:
     host = read("crates/vibecoder-android-host/src/lib.rs")
@@ -5861,6 +6135,393 @@ def check_process_execution() -> None:
             fail(f"Part 15 security invariant not recorded: {phrase}")
 
 
+
+def check_part34_3_omniroute_source_admission() -> None:
+    provenance_path = require("third_party/provenance/omniroute-3.8.50-reviewed.json")
+    try:
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        fail(f"Part 34.3 OmniRoute provenance JSON invalid: {exc}")
+        provenance = {}
+    if provenance.get("reviewed_archive_sha256") != EXPECTED_OMNIROUTE_ARCHIVE:
+        fail("Part 34.3 reviewed OmniRoute archive hash drifted")
+    if provenance.get("reviewed_archive_size_bytes") != 64028571:
+        fail("Part 34.3 reviewed OmniRoute archive size drifted")
+    if provenance.get("reviewed_archive_entry_count") != 13622:
+        fail("Part 34.3 reviewed OmniRoute entry count drifted")
+    if provenance.get("package_version") != "3.8.50":
+        fail("Part 34.3 OmniRoute package version drifted")
+    if provenance.get("node_engine") != ">=22.22.2 <23 || >=24.0.0 <27":
+        fail("Part 34.3 OmniRoute Node engine contract drifted")
+    if provenance.get("vibecoder_patch_profile_sha256") != "aec0f63fb0dec08f24fffde9209504ec447e9428bec1cd64c033649ed275fe3d":
+        fail("Part 34.3 deterministic OmniRoute profile drifted")
+    if provenance.get("prebuilt_runtime_present_in_reviewed_archive") is not False:
+        fail("Part 34.3 reviewed archive must remain source-only")
+    native = provenance.get("native_dependency_android_audit", {})
+    for key in (
+        "sharp_android_platform_package_present",
+        "sqlite_vec_android_platform_package_present",
+        "onnxruntime_node_android_supported",
+        "wreq_js_android_supported",
+    ):
+        if native.get(key) is not False:
+            fail(f"Part 34.3 Android native dependency audit marker drifted: {key}")
+    for key in (
+        "node_sqlite_fallback_present",
+        "sql_js_wasm_fallback_present",
+        "sqlite_vec_graceful_degradation_present",
+    ):
+        if native.get(key) is not True:
+            fail(f"Part 34.3 fallback audit marker missing: {key}")
+
+    prep = read("scripts/prepare_omniroute_android_source.py")
+    for token in (
+        "omniroute_archive_sha256_mismatch",
+        "omniroute_archive_parent_traversal",
+        "omniroute_archive_symlink_forbidden",
+        "omniroute_archive_duplicate_path",
+        "omniroute_reviewed_archive_contains_generated_runtime",
+        "omniroute_output_directory_protected",
+        "omniroute_archive_max_entry_size_mismatch",
+        "apply_omniroute_runtime_patches.py",
+        "omniroute_patched_target_hash_mismatch",
+    ):
+        if token not in prep:
+            fail(f"Part 34.3 source admission contract missing: {token}")
+
+    doc = read("docs/PART34_3_OMNIROUTE_ANDROID_PACKAGING.md")
+    for token in (
+        "OMNIROUTE_BUILD_BACKEND_ONLY=1",
+        "node:sqlite",
+        "sql.js",
+        "FTS5",
+        "does **not** claim",
+    ):
+        if token not in doc:
+            fail(f"Part 34.3 documentation missing: {token}")
+
+    try:
+        state = json.loads(read("PART34_STATE.json"))
+    except Exception as exc:
+        fail(f"Part 34 state JSON invalid during Part 34.3 check: {exc}")
+        state = {}
+    omni = state.get("omniroute_packaging", {})
+    for key in (
+        "reviewed_archive_verified",
+        "deterministic_patch_verified",
+        "native_dependency_audit_completed",
+    ):
+        if omni.get(key) is not True:
+            fail(f"Part 34.3 state marker missing: {key}")
+    for key in ("runtime_bundle_built", "apk_asset_packaged", "service_round_trip_proven"):
+        if omni.get(key) is not False:
+            fail(f"Part 34.3 proof marker must remain false until runtime evidence: {key}")
+    if state.get("blockers", {}).get("reviewed_omniroute_bundle_present") is not False:
+        fail("Part 34.3 reviewed source must not be conflated with a packaged runtime bundle")
+
+    profile_text = read("config/omniroute-android-runtime-profile.json")
+    try:
+        android_profile = json.loads(profile_text)
+    except Exception as exc:
+        fail(f"Part 34.3 Android runtime profile JSON invalid: {exc}")
+        android_profile = {}
+    if android_profile.get("profile_id") != "vibecoder-omniroute-android-backend-v1":
+        fail("Part 34.3 Android runtime profile id drifted")
+    if android_profile.get("build", {}).get("required_node_version") != "24.19.0":
+        fail("Part 34.3 Android bundle build must pin Node 24.19.0")
+    runtime = android_profile.get("runtime", {})
+    if runtime.get("entrypoint") != "server-ws.mjs" or runtime.get("bind_host") != "127.0.0.1" or runtime.get("port") != 20128:
+        fail("Part 34.3 Android loopback launch profile drifted")
+    for key in (
+        "android_runtime_profile_defined",
+        "backend_bundle_builder_ready",
+        "host_native_pruner_validated",
+        "independent_bundle_verifier_ready",
+        "bundle_tool_regression_passed",
+    ):
+        if omni.get(key) is not True:
+            fail(f"Part 34.3 Android bundle source marker missing: {key}")
+    for key in (
+        "apk_generated_asset_source_set_wired",
+        "apk_asset_stager_ready",
+        "app_private_installer_ready",
+        "asset_file_sha256_verified_on_extract",
+        "installed_tree_reverified_before_reuse",
+        "atomic_stage_promote_with_previous_rollback",
+        "previous_runtime_recovery_ready",
+        "apk_asset_verifier_mode_ready",
+        "device_asset_acceptance_mode_ready",
+        "asset_tool_regression_passed",
+    ):
+        if omni.get(key) is not True:
+            fail(f"Part 34.3.3 source marker missing: {key}")
+    if 'assets.srcDir("build/generated/omnirouteAssets")' not in read("android/app/build.gradle.kts"):
+        fail("Part 34.3.3 generated OmniRoute asset source set missing")
+
+    for key in (
+        "persistent_service_no_wallclock_timeout_ready",
+        "trusted_runtime_working_directory_ready",
+        "clean_bounded_runtime_environment_ready",
+        "rust_installed_tree_reverification_ready",
+        "signed_apk_manifest_hash_bound_at_launch",
+        "runtime_profile_readiness_probe_ready",
+        "readiness_requires_consecutive_attestations",
+        "explicit_service_stop_ready",
+        "explicit_service_restart_ready",
+        "persistent_ffi_session_ready",
+        "jni_service_start_status_stop_ready",
+        "device_service_acceptance_mode_ready",
+        "device_explicit_stop_acceptance_ready",
+        "service_tool_regression_passed",
+    ):
+        if omni.get(key) is not True:
+            fail(f"Part 34.3.4 service source marker missing: {key}")
+    if omni.get("automatic_service_restart") is not False:
+        fail("Part 34.3.4 automatic service restart must remain disabled")
+    if omni.get("fresh_rust_compile_for_34_3_4") is not False:
+        fail("Part 34.3.4 must not claim fresh Rust compile in this runner")
+
+    service_contracts = {
+        "crates/vibecoder-process-local/src/lib.rs": (
+            "pub fn start_persistent_runtime_service", "timeout: None",
+            "runtime_service_private_directory", "process_runtime_service_env_key_forbidden",
+        ),
+        "crates/vibecoder-android-host/src/omniroute_service.rs": (
+            "start_omniroute_service", "verify_installed_omniroute_runtime",
+            "READY_CONSECUTIVE_ATTESTATIONS: usize = 2", "GatewayCredential::Anonymous",
+            "android_host_omniroute_signed_manifest_sha_mismatch",
+        ),
+        "crates/vibecoder-android-host/src/omniroute_ffi.rs": (
+            "OMNIROUTE_SESSION", "vibecoder_android_host_omniroute_start_json",
+            "vibecoder_android_host_omniroute_status_json", "vibecoder_android_host_omniroute_stop_json",
+        ),
+        "android/app/src/main/cpp/native_bridge.c": (
+            "vibecoder_android_host_omniroute_start_json", "const size_t capacity = 1024u * 1024u",
+        ),
+        "scripts/test_part34_3_service_tools.py": ("Part 34.3.4 service-tool regression PASSED",),
+    }
+    for path, tokens in service_contracts.items():
+        source = read(path)
+        for token in tokens:
+            if token not in source:
+                fail(f"Part 34.3.4 service contract missing from {path}: {token}")
+
+    if omni.get("current_runner_build_preflight_passed") is not False:
+        fail("Part 34.3 current runner must not claim Node-24 bundle build preflight")
+    if omni.get("android_runtime_profile_sha256") != "50a905468713717b619fd083a9dbeabaf1ca0c9c996e05f0ab79b50fc10bb729":
+        fail("Part 34.3 Android runtime profile hash drifted")
+
+    for path, tokens in {
+        "scripts/prepare_omniroute_android_bundle.py": (
+            "omniroute_android_bundle_host_native_binary_forbidden",
+            ".vibecoder-omniroute-bundle.json",
+            "tree_sha256",
+        ),
+        "scripts/verify_omniroute_android_bundle.py": (
+            "omniroute_android_bundle_file_manifest_mismatch",
+            "omniroute_android_bundle_tree_hash_mismatch",
+        ),
+        "scripts/build_omniroute_android_bundle.py": (
+            "omniroute_android_build_node_version_mismatch",
+            "build:backend",
+            "android_bundle_verified",
+        ),
+        "scripts/test_part34_3_bundle_tools.py": (
+            "Part 34.3 bundle-tool regression PASSED",
+            "omniroute_bundle_external_symlink_forbidden",
+            "omniroute_android_bundle_forbidden_package:wreq-js",
+        ),
+        "scripts/stage_omniroute_android_asset.py": (
+            "omniroute_asset_stage_bundle_verification_failed",
+            "omniroute_asset_stage_tracked_source_output_forbidden",
+            "apk_asset_packaging_proven",
+        ),
+        "scripts/test_part34_3_asset_tools.py": (
+            "Part 34.3.3 asset-tool regression PASSED",
+            "stale staged asset survived atomic replacement",
+        ),
+        "android/app/src/main/java/com/vibecoder/shell/OmniRouteAssetInstaller.java": (
+            "vibecoder/runtime/omniroute",
+            "omniroute_asset_sha_mismatch",
+            "omniroute_post_commit_verification_failed",
+            "StandardCopyOption.ATOMIC_MOVE",
+        ),
+    }.items():
+        text = read(path)
+        for token in tokens:
+            if token not in text:
+                fail(f"Part 34.3 Android bundle contract missing from {path}: {token}")
+
+
+
+def check_part34_5_first_model_request() -> None:
+    contract = read("crates/vibecoder-gateway-contract/src/lib.rs")
+    chat = read("crates/vibecoder-gateway-omniroute/src/chat.rs")
+    client = read("crates/vibecoder-gateway-omniroute/src/client.rs")
+    inference = read("crates/vibecoder-android-host/src/inference.rs")
+    ffi = read("crates/vibecoder-android-host/src/omniroute_ffi.rs")
+    native = read("android/app/src/main/cpp/native_bridge.c")
+    bridge = read("android/app/src/main/java/com/vibecoder/shell/NativeBridge.java")
+    activity = read("android/app/src/main/java/com/vibecoder/shell/MainActivity.java")
+    device = read("scripts/test_android_diagnostic_device.sh")
+    project = json.loads(read("PROJECT_STATE.json")).get("part34_5_first_model_request", {})
+    state = json.loads(read("PART34_STATE.json")).get("first_model_request", {})
+
+    for token in (
+        "pub enum GatewayChatRole",
+        "pub struct GatewayChatRequest",
+        "pub struct GatewayChatResponse",
+        "async fn chat_completion(",
+    ):
+        if token not in contract:
+            fail(f"Part 34.5 provider-neutral chat contract missing: {token}")
+    for token in (
+        'stream: false',
+        'max_tokens: request.max_output_tokens',
+        'inference_tool_call_not_allowed_part34_5',
+        'inference_rate_limited',
+        'TokenUsage',
+    ):
+        if token not in chat:
+            fail(f"Part 34.5 OmniRoute chat invariant missing: {token}")
+    if 'ApiEndpoint::ChatCompletions' not in client or '.post(url)' not in client:
+        fail("Part 34.5 bounded POST /chat/completions transport missing")
+    for token in (
+        'client.execution_profile(credential)',
+        'client.list_models(credential)',
+        'client.chat_completion(credential, &request)',
+        'inference_requests_count: 1',
+        'automatic_retry_or_model_fallback: false',
+        'prompt_persisted: false',
+        'response_text_persisted: false',
+    ):
+        if token not in inference:
+            fail(f"Part 34.5 Android inference invariant missing: {token}")
+    if not (
+        inference.find('client.execution_profile(credential)')
+        < inference.find('client.list_models(credential)')
+        < inference.find('client.chat_completion(credential, &request)')
+    ):
+        fail("Part 34.5 inference ordering must be profile -> fresh catalog -> exactly one completion")
+    for token in (
+        'vibecoder_android_host_omniroute_inference_probe_json',
+        'MAX_INFERENCE_MODEL_BYTES',
+        'MAX_INFERENCE_PROMPT_BYTES',
+    ):
+        if token not in ffi:
+            fail(f"Part 34.5 one-shot Rust FFI contract missing: {token}")
+    if 'nativeOmniRouteInferenceProbe' not in native or 'nativeOmniRouteInferenceProbe' not in bridge:
+        fail("Part 34.5 JNI inference probe is not wired end-to-end")
+    if 'vibecoder_omniroute_inference_test' not in activity:
+        fail("Part 34.5 Android diagnostic inference intent is missing")
+    if 'omniroute_inference' not in device or 'OMNIROUTE_TEST_MODEL_ID' not in device:
+        fail("Part 34.5 physical-device inference acceptance mode is missing")
+
+    expected_project = {
+        "provider_neutral_chat_contract_ready": True,
+        "chat_completions_transport_ready": True,
+        "requires_active_attested_service": True,
+        "runtime_profile_rechecked_before_inference": True,
+        "fresh_catalog_exact_model_required": True,
+        "exactly_one_inference_request": True,
+        "automatic_retry_or_model_fallback": False,
+        "non_streaming_first_request_only": True,
+        "streaming_inference_ready": False,
+        "tool_calls_allowed": False,
+        "prompt_persisted_in_diagnostic": False,
+        "response_text_persisted_in_diagnostic": False,
+        "first_model_request_proven": False,
+        "fresh_rust_compile_for_34_5": False,
+    }
+    for key, value in expected_project.items():
+        if project.get(key) != value:
+            fail(f"Part 34.5 PROJECT_STATE mismatch: {key}={project.get(key)!r}, expected {value!r}")
+    if not isinstance(project.get("controller_real_model_connected"), bool):
+        fail("Part 34.5 PROJECT_STATE controller_real_model_connected must remain boolean")
+    expected_state = {
+        "endpoint": "/v1/chat/completions",
+        "stream": False,
+        "runtime_profile_rechecked": True,
+        "exact_model_catalog_precheck": True,
+        "vibecoder_inference_retry_count": 0,
+        "alternate_model_fallback": False,
+        "tool_calls_allowed": False,
+        "prompt_persisted": False,
+        "response_text_persisted": False,
+        "first_model_request_proven": False,
+        "fresh_rust_compile": False,
+    }
+    for key, value in expected_state.items():
+        if state.get(key) != value:
+            fail(f"Part 34.5 PART34_STATE mismatch: {key}={state.get(key)!r}, expected {value!r}")
+
+    doc = read("docs/PART34_5_FIRST_MODEL_REQUEST.md")
+    if "A real Android model response remains pending" not in doc:
+        fail("Part 34.5 documentation must preserve the real-device evidence boundary")
+
+def check_part34_6_conversation_model_controller() -> None:
+    core = read("crates/vibecoder-core/src/lib.rs")
+    project = json.loads(read("PROJECT_STATE.json")).get("part34_6_controller_real_model", {})
+    state = json.loads(read("PART34_STATE.json")).get("controller_real_model", {})
+    workflow = read(".github/workflows/android-diagnostic-apk.yml")
+
+    for token in (
+        "pub struct ConversationModelTurnOutcome",
+        "pub async fn run_persisted_model_conversation_turn(",
+        "ensure_conversation_model_turn_capacity(&conversation, prompt)?",
+        "conversation.append_message(ConversationRole::User, prompt.to_owned())?;",
+        "self.gateway.execution_profile(gateway_credential).await?",
+        "self.gateway.list_models(gateway_credential).await?",
+        ".chat_completion(gateway_credential, &request)",
+        "conversation.append_message(ConversationRole::Assistant, assistant_text.clone())?;",
+        "conversation_model_turn_failure_cleanup_failed",
+    ):
+        if token not in core:
+            fail(f"Part 34.6 durable model-controller invariant missing: {token}")
+
+    start = core.find("pub async fn run_persisted_model_conversation_turn(")
+    end = core.find("pub async fn run_persisted_model_conversation_turn_resolved", start)
+    method = core[start:end] if start >= 0 and end > start else ""
+    if method.count(".chat_completion(gateway_credential, &request)") != 1:
+        fail("Part 34.6 controller must issue exactly one gateway completion")
+    for forbidden in ("run_backend_task(", ".run_turn(", "decision_after_failure", "RouteDecision::Fallback", "loop {", "while "):
+        if forbidden in method:
+            fail(f"Part 34.6 model-only controller contains forbidden agent/retry token: {forbidden}")
+
+    expected_true = (
+        "controller_real_model_connected",
+        "durable_prompt_before_network",
+        "fresh_profile_and_catalog_before_inference",
+        "bounded_recent_history_context",
+        "exact_model_identity_rechecked",
+        "exactly_one_gateway_completion",
+        "assistant_response_durable",
+        "failure_cleanup_fail_closed",
+        "secret_reference_resolution_supported",
+    )
+    for key in expected_true:
+        if project.get(key) is not True:
+            fail(f"Part 34.6 PROJECT_STATE true invariant missing: {key}")
+    for key in (
+        "automatic_retry_or_fallback",
+        "jcode_tool_bridge_enabled",
+        "streaming_controller_enabled",
+        "real_android_conversation_turn_proven",
+        "fresh_rust_compile_for_34_6",
+    ):
+        if project.get(key) is not False:
+            fail(f"Part 34.6 PROJECT_STATE overclaim: {key}")
+    if state.get("step") != "34.6-controller-real-model" or state.get("exactly_one_inference_request") is not True:
+        fail("Part 34.6 PART34_STATE identity/inference count invalid")
+    for token in (
+        '- "crates/vibecoder-core/**"',
+        "python3 scripts/validate_part34_6.py",
+        "python3 scripts/test_part34_6_controller_tools.py",
+    ):
+        if token not in workflow:
+            fail(f"Part 34.6 CI coverage missing: {token}")
+
+
 def check_checksum_manifest() -> None:
     manifest = require("CHECKSUMS.sha256")
     listed: set[str] = set()
@@ -5933,6 +6594,10 @@ def main() -> int:
     check_part29_jcode_android_packaging()
     check_part30_android_device_proof()
     check_part31_first_android_apk()
+    check_part34_2_node_staging_lane()
+    check_part34_3_omniroute_source_admission()
+    check_part34_5_first_model_request()
+    check_part34_6_conversation_model_controller()
     check_part31_review_fixes()
     check_project_state_and_docs()
     check_checksum_manifest()

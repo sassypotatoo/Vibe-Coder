@@ -37,6 +37,7 @@ impl Default for CheckpointId {
 pub enum CheckpointReason {
     Manual,
     BeforeAgentChange,
+    AgentChangeVerification,
     BeforeBuildRepair,
     BeforeRollback,
 }

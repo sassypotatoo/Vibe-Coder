@@ -6,6 +6,7 @@
 
 mod auth;
 mod catalog;
+mod chat;
 mod client;
 mod config;
 mod gateway;

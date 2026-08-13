@@ -1,6 +1,8 @@
 use crate::{JcodeConnectionConfig, JcodeConnectionFailure, JcodeConnectionMode};
 use jcode_sdk::{ConnectOptions, JcodeClient, LaunchOptions};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::ffi::OsString;
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use vibecoder_domain::{Result, VibeCoderError};
@@ -298,6 +300,7 @@ fn open_client(config: &JcodeConnectionConfig) -> jcode_sdk::Result<JcodeClient>
             working_dir: None,
             inherit_logins: *inherit_logins,
             binary: binary.clone(),
+            env: model_gateway_bridge_launch_env(config),
             startup_timeout: Duration::from_millis(*startup_timeout_ms),
             inherit_stderr: false,
             cleanup_timeout: Duration::from_millis(*cleanup_timeout_ms),
@@ -308,6 +311,40 @@ fn open_client(config: &JcodeConnectionConfig) -> jcode_sdk::Result<JcodeClient>
             ..LaunchOptions::default()
         }),
     }
+}
+
+fn model_gateway_bridge_launch_env(config: &JcodeConnectionConfig) -> HashMap<OsString, OsString> {
+    let mut env = HashMap::new();
+    let Some(bridge) = config.model_gateway_bridge else {
+        return env;
+    };
+
+    // Exact Jcode 0.73.0 supports a localhost OpenAI-compatible provider through these variables.
+    // Keep all model traffic on the same-phone OmniRoute endpoint; no ambient proxy, provider
+    // fallback, auto-poke, autoreview, or autojudge may create hidden extra inference turns.
+    for (key, value) in [
+        ("JCODE_OPENAI_COMPAT_API_BASE", bridge.api_base()),
+        ("JCODE_OPENAI_COMPAT_LOCAL_ENABLED", "1"),
+        ("JCODE_OPENROUTER_ALLOW_NO_AUTH", "1"),
+        ("JCODE_RUNTIME_PROVIDER", "openai-compatible"),
+        ("JCODE_INITIAL_PROVIDER_EXPLICIT", "1"),
+        ("JCODE_OPENROUTER_NO_FALLBACK", "1"),
+        ("JCODE_AUTO_POKE", "off"),
+        ("JCODE_RUN_AUTO_POKE", "0"),
+        ("JCODE_AUTOREVIEW_ENABLED", "false"),
+        ("JCODE_AUTOJUDGE_ENABLED", "false"),
+        // Part 34.7 exposes only the reviewed minimal file-editing surface. Jcode's minimal
+        // profile also contains `bash`, so remove it explicitly until a later command-policy
+        // bridge can authorize command execution.
+        ("JCODE_TOOL_PROFILE", "minimal"),
+        ("JCODE_DISABLED_TOOLS", "bash"),
+        ("JCODE_NO_TELEMETRY", "1"),
+        ("NO_PROXY", "127.0.0.1,localhost"),
+        ("no_proxy", "127.0.0.1,localhost"),
+    ] {
+        env.insert(OsString::from(key), OsString::from(value));
+    }
+    env
 }
 
 fn identity_from(client: &JcodeClient) -> JcodeServerIdentity {
@@ -339,4 +376,24 @@ mod tests {
         assert_eq!(snapshot.generation, 0);
         assert_eq!(snapshot.state, JcodeConnectionState::Disconnected);
     }
+
+    #[test]
+    fn omniroute_bridge_launch_env_disables_hidden_extra_inference() {
+        let mut config = JcodeConnectionConfig::default();
+        config.model_gateway_bridge = Some(
+            crate::JcodeModelGatewayBridge::VibeCoderOmniRouteLoopbackV1,
+        );
+        let env = model_gateway_bridge_launch_env(&config);
+        let get = |key: &str| env.get(&OsString::from(key)).and_then(|v| v.to_str());
+        assert_eq!(get("JCODE_OPENAI_COMPAT_API_BASE"), Some("http://127.0.0.1:20128/v1"));
+        assert_eq!(get("JCODE_OPENROUTER_ALLOW_NO_AUTH"), Some("1"));
+        assert_eq!(get("JCODE_OPENROUTER_NO_FALLBACK"), Some("1"));
+        assert_eq!(get("JCODE_AUTO_POKE"), Some("off"));
+        assert_eq!(get("JCODE_AUTOREVIEW_ENABLED"), Some("false"));
+        assert_eq!(get("JCODE_AUTOJUDGE_ENABLED"), Some("false"));
+        assert_eq!(get("JCODE_TOOL_PROFILE"), Some("minimal"));
+        assert_eq!(get("JCODE_DISABLED_TOOLS"), Some("bash"));
+        assert_eq!(get("NO_PROXY"), Some("127.0.0.1,localhost"));
+    }
+
 }

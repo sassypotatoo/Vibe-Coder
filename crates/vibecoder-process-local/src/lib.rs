@@ -41,6 +41,7 @@ const PROJECTS_ROOT_NAME: &str = "projects";
 const RUNTIME_ROOT_NAME: &str = "runtime";
 const PROCESS_HOME_NAME: &str = "process-home";
 const PROCESS_TMP_NAME: &str = "process-tmp";
+const RUNTIME_SERVICES_NAME: &str = "services";
 const INTERNAL_TEMP_PREFIX: &str = ".vibecoder-tmp-";
 const MAX_RELATIVE_PATH_BYTES: usize = 4096;
 const MAX_PATH_COMPONENT_BYTES: usize = 255;
@@ -48,6 +49,12 @@ const MAX_RUNTIME_TOOL_ID_BYTES: usize = 64;
 const MAX_RUNTIME_TOOLS: usize = 64;
 const MAX_RUNTIME_FIXED_ARGS: usize = 32;
 const MAX_RUNTIME_FIXED_ARG_BYTES: usize = 4096;
+const MAX_RUNTIME_SERVICE_ID_BYTES: usize = 64;
+const MAX_RUNTIME_SERVICE_ARGS: usize = 128;
+const MAX_RUNTIME_SERVICE_ARG_BYTES: usize = 4096;
+const MAX_RUNTIME_SERVICE_ENV_VARS: usize = 64;
+const MAX_RUNTIME_SERVICE_ENV_KEY_BYTES: usize = 64;
+const MAX_RUNTIME_SERVICE_ENV_VALUE_BYTES: usize = 4096;
 const MAX_ACTIVE_PROCESSES: usize = 4;
 const MAX_ACTIVE_PER_PROJECT: usize = 2;
 const EVENT_QUEUE_CAPACITY: usize = 256;
@@ -124,15 +131,52 @@ impl RuntimeToolSpec {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ActiveProcessScope {
+    Project(ProjectId),
+    RuntimeService(String),
+}
+
 #[derive(Debug)]
 struct ActiveProcess {
-    project_id: ProjectId,
+    scope: ActiveProcessScope,
     cancel_requested: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Default)]
 struct ProcessRegistry {
     active: HashMap<ProcessId, ActiveProcess>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LocalExecutionLimits {
+    timeout: Option<Duration>,
+    max_stdout_bytes: usize,
+    max_stderr_bytes: usize,
+}
+
+impl LocalExecutionLimits {
+    fn command(options: ProcessExecutionOptions) -> Result<Self> {
+        let options = options.validate()?;
+        Ok(Self {
+            timeout: Some(options.timeout()),
+            max_stdout_bytes: options.max_stdout_bytes,
+            max_stderr_bytes: options.max_stderr_bytes,
+        })
+    }
+
+    fn persistent_service(max_stdout_bytes: usize, max_stderr_bytes: usize) -> Result<Self> {
+        if max_stdout_bytes > vibecoder_process_contract::MAX_STREAM_CAPTURE_BYTES
+            || max_stderr_bytes > vibecoder_process_contract::MAX_STREAM_CAPTURE_BYTES
+        {
+            return Err(process_error("process_capture_limit_out_of_range"));
+        }
+        Ok(Self {
+            timeout: None,
+            max_stdout_bytes,
+            max_stderr_bytes,
+        })
+    }
 }
 
 pub struct LocalProcessRuntime {
@@ -143,6 +187,7 @@ pub struct LocalProcessRuntime {
     packaged_executable_root: PathBuf,
     process_home: PathBuf,
     process_tmp: PathBuf,
+    runtime_services_root: PathBuf,
     runtime_tools: HashMap<String, RuntimeToolSpec>,
     registry: Arc<Mutex<ProcessRegistry>>,
 }
@@ -208,6 +253,8 @@ impl LocalProcessRuntime {
             let runtime_root = ensure_fixed_private_directory(&product_root, RUNTIME_ROOT_NAME)?;
             let process_home = ensure_fixed_private_directory(&runtime_root, PROCESS_HOME_NAME)?;
             let process_tmp = ensure_fixed_private_directory(&runtime_root, PROCESS_TMP_NAME)?;
+            let runtime_services_root =
+                ensure_fixed_private_directory(&runtime_root, RUNTIME_SERVICES_NAME)?;
 
             let mut tools = HashMap::new();
             for spec in runtime_tools {
@@ -232,6 +279,7 @@ impl LocalProcessRuntime {
                 packaged_executable_root,
                 process_home,
                 process_tmp,
+                runtime_services_root,
                 runtime_tools: tools,
                 registry: Arc::new(Mutex::new(ProcessRegistry::default())),
             })
@@ -258,7 +306,10 @@ impl LocalProcessRuntime {
         Ok(registry.active.len())
     }
 
-    fn reserve_process(&self, project_id: ProjectId) -> Result<(ProcessId, Arc<AtomicBool>)> {
+    fn reserve_process(
+        &self,
+        scope: ActiveProcessScope,
+    ) -> Result<(ProcessId, Arc<AtomicBool>)> {
         let mut registry = self
             .registry
             .lock()
@@ -266,14 +317,30 @@ impl LocalProcessRuntime {
         if registry.active.len() >= MAX_ACTIVE_PROCESSES {
             return Err(process_error("process_active_limit"));
         }
-        if registry
-            .active
-            .values()
-            .filter(|active| active.project_id == project_id)
-            .count()
-            >= MAX_ACTIVE_PER_PROJECT
-        {
-            return Err(process_error("process_project_active_limit"));
+        match &scope {
+            ActiveProcessScope::Project(project_id) => {
+                if registry
+                    .active
+                    .values()
+                    .filter(|active| {
+                        matches!(&active.scope, ActiveProcessScope::Project(id) if id == project_id)
+                    })
+                    .count()
+                    >= MAX_ACTIVE_PER_PROJECT
+                {
+                    return Err(process_error("process_project_active_limit"));
+                }
+            }
+            ActiveProcessScope::RuntimeService(service_id) => {
+                if registry.active.values().any(|active| {
+                    matches!(
+                        &active.scope,
+                        ActiveProcessScope::RuntimeService(active_id) if active_id == service_id
+                    )
+                }) {
+                    return Err(process_error("process_runtime_service_already_active"));
+                }
+            }
         }
 
         for _ in 0..8 {
@@ -282,7 +349,7 @@ impl LocalProcessRuntime {
             match registry.active.entry(process_id) {
                 Entry::Vacant(entry) => {
                     entry.insert(ActiveProcess {
-                        project_id,
+                        scope: scope.clone(),
                         cancel_requested: Arc::clone(&cancel_requested),
                     });
                     return Ok((process_id, cancel_requested));
@@ -378,6 +445,319 @@ impl LocalProcessRuntime {
         }
     }
 
+    fn runtime_service_directory(&self, service_id: &str) -> Result<PathBuf> {
+        let service_id = validate_runtime_service_id(service_id)?;
+        verify_no_symlink_directory(&self.runtime_root)?;
+        verify_exact_child_directory(
+            &self.runtime_root,
+            &self.runtime_services_root,
+            RUNTIME_SERVICES_NAME,
+        )?;
+        ensure_fixed_private_directory(&self.runtime_services_root, service_id)
+    }
+
+    /// Return the verified writable state directory owned by one app-internal runtime service.
+    /// Callers may use this path only as data/config state, never as executable authority.
+    pub fn runtime_service_private_directory(&self, service_id: &str) -> Result<PathBuf> {
+        self.runtime_service_directory(service_id)
+    }
+
+    fn resolve_runtime_working_directory(&self, relative: &Path) -> Result<PathBuf> {
+        let normalized = normalize_relative_path(relative, false)?;
+        verify_no_symlink_directory(&self.runtime_root)?;
+        let mut current = self.runtime_root.clone();
+        for component in normalized.components() {
+            let Component::Normal(name) = component else {
+                continue;
+            };
+            current.push(name);
+            verify_no_symlink_directory(&current)?;
+        }
+        let canonical = canonical_existing_directory(&current)?;
+        if canonical != current || !canonical.starts_with(&self.runtime_root) {
+            return Err(process_error("process_runtime_service_working_dir_invalid"));
+        }
+        Ok(canonical)
+    }
+
+    fn prepare_runtime_service_command(
+        &self,
+        service_id: &str,
+        tool_id: &str,
+        args: &[String],
+        runtime_working_dir: Option<&Path>,
+        environment: &[(String, String)],
+    ) -> Result<Command> {
+        let service_private_dir = self.runtime_service_directory(service_id)?;
+        let working_dir = match runtime_working_dir {
+            Some(relative) => self.resolve_runtime_working_directory(relative)?,
+            None => service_private_dir,
+        };
+        let (executable, fixed_args) = self.resolve_runtime_tool(tool_id)?;
+        if args.len() > MAX_RUNTIME_SERVICE_ARGS {
+            return Err(process_error("process_runtime_service_arg_limit"));
+        }
+        for arg in args {
+            validate_runtime_service_arg(arg)?;
+        }
+        if environment.len() > MAX_RUNTIME_SERVICE_ENV_VARS {
+            return Err(process_error("process_runtime_service_env_limit"));
+        }
+        let mut seen_env = std::collections::HashSet::new();
+        for (key, value) in environment {
+            validate_runtime_service_env(key, value)?;
+            if !seen_env.insert(key.as_str()) {
+                return Err(process_error("process_runtime_service_env_duplicate"));
+            }
+        }
+        verify_no_symlink_directory(&working_dir)?;
+        verify_executable_file(&executable)?;
+        verify_no_symlink_directory(&self.process_home)?;
+        verify_no_symlink_directory(&self.process_tmp)?;
+
+        let mut command = Command::new(executable);
+        command
+            .args(&fixed_args)
+            .args(args)
+            .current_dir(working_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .env_clear()
+            .env("HOME", &self.process_home)
+            .env("TMPDIR", &self.process_tmp);
+        for (key, value) in environment {
+            command.env(key, value);
+        }
+
+        #[cfg(unix)]
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                #[cfg(target_os = "android")]
+                {
+                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    if libc::getppid() == 1 {
+                        return Err(std::io::Error::from_raw_os_error(libc::ECHILD));
+                    }
+                }
+                Ok(())
+            });
+        }
+        Ok(command)
+    }
+
+    /// Start one trusted package-installed runtime tool as an app-internal service/process.
+    ///
+    /// This deliberately bypasses the user-command approval envelope because the executable is not
+    /// project-controlled and may only be selected from the immutable runtime-tool registry. It
+    /// still has no shell/PATH lookup, inherits no ambient environment, uses a private service
+    /// working directory, and shares the same bounded-output/cancellation supervisor as project
+    /// commands. A service id may have at most one active process.
+    pub fn start_runtime_service(
+        &self,
+        service_id: &str,
+        tool_id: &str,
+        args: &[String],
+        options: ProcessExecutionOptions,
+    ) -> Result<RunningProcess> {
+        #[cfg(not(unix))]
+        {
+            let _ = (service_id, tool_id, args, options);
+            return Err(process_error("process_runtime_unsupported_platform"));
+        }
+
+        #[cfg(unix)]
+        {
+            let limits = LocalExecutionLimits::command(options)?;
+            let service_id = validate_runtime_service_id(service_id)?.to_owned();
+            let command = self.prepare_runtime_service_command(
+                &service_id,
+                tool_id,
+                args,
+                None,
+                &[],
+            )?;
+            self.spawn_supervised_command(
+                command,
+                ActiveProcessScope::RuntimeService(service_id),
+                limits,
+            )
+        }
+    }
+
+    /// Start a long-running app-internal service with no automatic wall-clock timeout.
+    ///
+    /// The executable remains package-owned. The interpreted runtime working directory must be an
+    /// existing symlink-free descendant of `files/vibecoder/runtime`, and the explicit environment
+    /// is bounded/validated after `env_clear()`. Cancellation remains explicit and terminates the
+    /// process group.
+    pub fn start_persistent_runtime_service(
+        &self,
+        service_id: &str,
+        tool_id: &str,
+        runtime_working_dir: &Path,
+        args: &[String],
+        environment: &[(String, String)],
+        max_stdout_bytes: usize,
+        max_stderr_bytes: usize,
+    ) -> Result<RunningProcess> {
+        #[cfg(not(unix))]
+        {
+            let _ = (
+                service_id,
+                tool_id,
+                runtime_working_dir,
+                args,
+                environment,
+                max_stdout_bytes,
+                max_stderr_bytes,
+            );
+            return Err(process_error("process_runtime_unsupported_platform"));
+        }
+
+        #[cfg(unix)]
+        {
+            let limits = LocalExecutionLimits::persistent_service(
+                max_stdout_bytes,
+                max_stderr_bytes,
+            )?;
+            let service_id = validate_runtime_service_id(service_id)?.to_owned();
+            let command = self.prepare_runtime_service_command(
+                &service_id,
+                tool_id,
+                args,
+                Some(runtime_working_dir),
+                environment,
+            )?;
+            self.spawn_supervised_command(
+                command,
+                ActiveProcessScope::RuntimeService(service_id),
+                limits,
+            )
+        }
+    }
+
+    pub fn active_runtime_service(&self, service_id: &str) -> Result<usize> {
+        let service_id = validate_runtime_service_id(service_id)?;
+        let registry = self
+            .registry
+            .lock()
+            .map_err(|_| process_error("process_registry_poisoned"))?;
+        Ok(registry
+            .active
+            .values()
+            .filter(|active| {
+                matches!(
+                    &active.scope,
+                    ActiveProcessScope::RuntimeService(active_id) if active_id == service_id
+                )
+            })
+            .count())
+    }
+
+    #[cfg(unix)]
+    fn spawn_supervised_command(
+        &self,
+        mut command: Command,
+        scope: ActiveProcessScope,
+        options: LocalExecutionLimits,
+    ) -> Result<RunningProcess> {
+        let (process_id, cancel_requested) = self.reserve_process(scope)?;
+
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(_) => {
+                self.release_process(process_id);
+                return Err(process_error("process_spawn_failed"));
+            }
+        };
+        let process_started = Instant::now();
+
+        let stdout = match child.stdout.take() {
+            Some(stdout) => stdout,
+            None => {
+                terminate_process_group_immediately(&mut child);
+                self.release_process(process_id);
+                return Err(process_error("process_stdout_pipe_missing"));
+            }
+        };
+        let stderr = match child.stderr.take() {
+            Some(stderr) => stderr,
+            None => {
+                terminate_process_group_immediately(&mut child);
+                self.release_process(process_id);
+                return Err(process_error("process_stderr_pipe_missing"));
+            }
+        };
+
+        if set_nonblocking(stdout.as_raw_fd()).is_err()
+            || set_nonblocking(stderr.as_raw_fd()).is_err()
+        {
+            terminate_process_group_immediately(&mut child);
+            self.release_process(process_id);
+            return Err(process_error("process_pipe_nonblocking_failed"));
+        }
+
+        let (event_tx, event_rx) = sync_channel(EVENT_QUEUE_CAPACITY);
+        let (completion_tx, completion_rx) = oneshot::channel();
+        let _ = event_tx.try_send(ProcessEvent::Started { process_id });
+
+        let registry = Arc::clone(&self.registry);
+        let child_pid = child.id();
+        let payload = Arc::new(Mutex::new(Some(SupervisorPayload {
+            child,
+            stdout,
+            stderr,
+        })));
+        let worker_payload = Arc::clone(&payload);
+        let thread_name = format!(
+            "vibecoder-process-{}",
+            &process_id.as_uuid().simple().to_string()[..8],
+        );
+        let spawn_result = thread::Builder::new().name(thread_name).spawn(move || {
+            let payload = worker_payload.lock().ok().and_then(|mut slot| slot.take());
+            let result = match payload {
+                Some(payload) => supervise_process(
+                    process_id,
+                    child_pid,
+                    payload.child,
+                    payload.stdout,
+                    payload.stderr,
+                    process_started,
+                    options,
+                    cancel_requested,
+                    &event_tx,
+                ),
+                None => Err(process_error("process_supervisor_payload_missing")),
+            };
+            if let Ok(mut registry) = registry.lock() {
+                registry.active.remove(&process_id);
+            }
+            let _ = completion_tx.send(result);
+        });
+
+        if spawn_result.is_err() {
+            if let Ok(mut slot) = payload.lock() {
+                if let Some(mut payload) = slot.take() {
+                    terminate_process_group_immediately(&mut payload.child);
+                }
+            }
+            self.release_process(process_id);
+            return Err(process_error("process_supervisor_start_failed"));
+        }
+
+        Ok(RunningProcess::from_channels(
+            process_id,
+            event_rx,
+            completion_rx,
+        ))
+    }
+
     fn prepare_command(
         &self,
         project: &ProjectRef,
@@ -422,11 +802,19 @@ impl LocalProcessRuntime {
         #[cfg(unix)]
         unsafe {
             command.pre_exec(|| {
-                if libc::setpgid(0, 0) == 0 {
-                    Ok(())
-                } else {
-                    Err(std::io::Error::last_os_error())
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
                 }
+                #[cfg(target_os = "android")]
+                {
+                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    if libc::getppid() == 1 {
+                        return Err(std::io::Error::from_raw_os_error(libc::ECHILD));
+                    }
+                }
+                Ok(())
             });
         }
 
@@ -467,99 +855,14 @@ impl ProcessRuntime for LocalProcessRuntime {
 
         #[cfg(unix)]
         {
-            let options = options.validate()?;
+            let limits = LocalExecutionLimits::command(options)?;
             let authorized = envelope.into_authorized_command();
-            let mut command = self.prepare_command(project, &authorized)?;
-            let (process_id, cancel_requested) = self.reserve_process(project.id)?;
-
-            let mut child = match command.spawn() {
-                Ok(child) => child,
-                Err(_) => {
-                    self.release_process(process_id);
-                    return Err(process_error("process_spawn_failed"));
-                }
-            };
-            let process_started = Instant::now();
-
-            let stdout = match child.stdout.take() {
-                Some(stdout) => stdout,
-                None => {
-                    terminate_process_group_immediately(&mut child);
-                    self.release_process(process_id);
-                    return Err(process_error("process_stdout_pipe_missing"));
-                }
-            };
-            let stderr = match child.stderr.take() {
-                Some(stderr) => stderr,
-                None => {
-                    terminate_process_group_immediately(&mut child);
-                    self.release_process(process_id);
-                    return Err(process_error("process_stderr_pipe_missing"));
-                }
-            };
-
-            if set_nonblocking(stdout.as_raw_fd()).is_err()
-                || set_nonblocking(stderr.as_raw_fd()).is_err()
-            {
-                terminate_process_group_immediately(&mut child);
-                self.release_process(process_id);
-                return Err(process_error("process_pipe_nonblocking_failed"));
-            }
-
-            let (event_tx, event_rx) = sync_channel(EVENT_QUEUE_CAPACITY);
-            let (completion_tx, completion_rx) = oneshot::channel();
-            let _ = event_tx.try_send(ProcessEvent::Started { process_id });
-
-            let registry = Arc::clone(&self.registry);
-            let child_pid = child.id();
-            let payload = Arc::new(Mutex::new(Some(SupervisorPayload {
-                child,
-                stdout,
-                stderr,
-            })));
-            let worker_payload = Arc::clone(&payload);
-            let thread_name = format!(
-                "vibecoder-process-{}",
-                &process_id.as_uuid().simple().to_string()[..8],
-            );
-            let spawn_result = thread::Builder::new().name(thread_name).spawn(move || {
-                let payload = worker_payload.lock().ok().and_then(|mut slot| slot.take());
-                let result = match payload {
-                    Some(payload) => supervise_process(
-                        process_id,
-                        child_pid,
-                        payload.child,
-                        payload.stdout,
-                        payload.stderr,
-                        process_started,
-                        options,
-                        cancel_requested,
-                        &event_tx,
-                    ),
-                    None => Err(process_error("process_supervisor_payload_missing")),
-                };
-                if let Ok(mut registry) = registry.lock() {
-                    registry.active.remove(&process_id);
-                }
-                let _ = completion_tx.send(result);
-            });
-
-            if spawn_result.is_err() {
-                // The thread never ran, so the original Arc still owns the complete child payload.
-                if let Ok(mut slot) = payload.lock() {
-                    if let Some(mut payload) = slot.take() {
-                        terminate_process_group_immediately(&mut payload.child);
-                    }
-                }
-                self.release_process(process_id);
-                return Err(process_error("process_supervisor_start_failed"));
-            }
-
-            Ok(RunningProcess::from_channels(
-                process_id,
-                event_rx,
-                completion_rx,
-            ))
+            let command = self.prepare_command(project, &authorized)?;
+            self.spawn_supervised_command(
+                command,
+                ActiveProcessScope::Project(project.id),
+                limits,
+            )
         }
     }
 
@@ -571,7 +874,9 @@ impl ProcessRuntime for LocalProcessRuntime {
         Ok(registry
             .active
             .values()
-            .filter(|active| active.project_id == project_id)
+            .filter(|active| {
+                matches!(&active.scope, ActiveProcessScope::Project(id) if id == &project_id)
+            })
             .count())
     }
 
@@ -601,11 +906,11 @@ fn supervise_process(
     mut stdout: ChildStdout,
     mut stderr: ChildStderr,
     started: Instant,
-    options: ProcessExecutionOptions,
+    options: LocalExecutionLimits,
     cancel_requested: Arc<AtomicBool>,
     event_tx: &SyncSender<ProcessEvent>,
 ) -> Result<ProcessResult> {
-    let deadline = started + options.timeout();
+    let deadline = options.timeout.map(|timeout| started + timeout);
     let mut stdout_capture = Vec::new();
     let mut stderr_capture = Vec::new();
     let mut stdout_truncated = false;
@@ -667,7 +972,7 @@ fn supervise_process(
         if exit_status.is_none() && requested_termination.is_none() {
             let requested = if cancel_requested.load(Ordering::Acquire) {
                 Some(ProcessTermination::Cancelled)
-            } else if now >= deadline {
+            } else if deadline.is_some_and(|deadline| now >= deadline) {
                 Some(ProcessTermination::TimedOut)
             } else {
                 None
@@ -1102,6 +1407,63 @@ fn is_forbidden_display_char(ch: char) -> bool {
         )
 }
 
+fn validate_runtime_service_env(key: &str, value: &str) -> Result<()> {
+    if key.is_empty()
+        || key.len() > MAX_RUNTIME_SERVICE_ENV_KEY_BYTES
+        || !key.bytes().enumerate().all(|(index, byte)| {
+            if index == 0 {
+                byte.is_ascii_uppercase() || byte == b'_'
+            } else {
+                byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_'
+            }
+        })
+    {
+        return Err(process_error("process_runtime_service_env_key_invalid"));
+    }
+    if matches!(
+        key,
+        "HOME"
+            | "TMPDIR"
+            | "PATH"
+            | "LD_PRELOAD"
+            | "LD_LIBRARY_PATH"
+            | "NODE_OPTIONS"
+            | "NODE_PATH"
+    ) {
+        return Err(process_error("process_runtime_service_env_key_forbidden"));
+    }
+    if value.len() > MAX_RUNTIME_SERVICE_ENV_VALUE_BYTES
+        || value.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
+    {
+        return Err(process_error("process_runtime_service_env_value_invalid"));
+    }
+    Ok(())
+}
+
+fn validate_runtime_service_id(service_id: &str) -> Result<&str> {
+    if service_id.is_empty()
+        || service_id.len() > MAX_RUNTIME_SERVICE_ID_BYTES
+        || !service_id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        || service_id.starts_with('-')
+        || service_id.ends_with('-')
+    {
+        return Err(process_error("process_runtime_service_id_invalid"));
+    }
+    Ok(service_id)
+}
+
+fn validate_runtime_service_arg(value: &str) -> Result<()> {
+    if value.len() > MAX_RUNTIME_SERVICE_ARG_BYTES
+        || value.as_bytes().contains(&0)
+        || value.chars().any(is_forbidden_control)
+    {
+        return Err(process_error("process_runtime_service_arg_invalid"));
+    }
+    Ok(())
+}
+
 fn process_error(code: &'static str) -> VibeCoderError {
     VibeCoderError::Process(code.into())
 }
@@ -1134,6 +1496,24 @@ mod tests {
             ["bad\narg"],
         )
         .is_err());
+    }
+
+    #[test]
+    fn runtime_service_ids_and_args_are_bounded() {
+        assert!(validate_runtime_service_id("omniroute").is_ok());
+        assert!(validate_runtime_service_id("node-probe-1").is_ok());
+        assert!(validate_runtime_service_id("../escape").is_err());
+        assert!(validate_runtime_service_id("UPPER").is_err());
+        assert!(validate_runtime_service_arg("--version").is_ok());
+        assert!(validate_runtime_service_arg("bad\narg").is_err());
+        assert!(validate_runtime_service_env("PORT", "20128").is_ok());
+        assert!(validate_runtime_service_env("NODE_ENV", "production").is_ok());
+        assert!(validate_runtime_service_env("PATH", "/tmp").is_err());
+        assert!(validate_runtime_service_env("lower", "x").is_err());
+        assert!(validate_runtime_service_env("DATA_DIR", "bad\npath").is_err());
+        let persistent = LocalExecutionLimits::persistent_service(1024, 1024)
+            .expect("persistent service limits");
+        assert!(persistent.timeout.is_none());
     }
 
     #[cfg(unix)]

@@ -11,6 +11,13 @@ use vibecoder_domain::{
 
 pub type EventHandler = Box<dyn FnMut(AgentEvent) + Send + 'static>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelGatewayBridgeIdentity {
+    pub gateway_id: String,
+    pub transport_provider: String,
+    pub exact_model_id_passthrough: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct CreateSessionOptions {
     /// Optional runtime-specific creation-time model request. Adapters must reject this when the
@@ -32,6 +39,12 @@ pub trait AgentRuntime: Send + Sync {
 
     /// Passive snapshot of capabilities already negotiated with the runtime.
     fn capabilities(&self) -> RuntimeCapabilities;
+
+    /// Optional attestation that this agent runtime sends model traffic through a specific
+    /// VibeCoder-controlled gateway while preserving exact model ids. The default is unbridged.
+    fn model_gateway_bridge_identity(&self) -> Option<ModelGatewayBridgeIdentity> {
+        None
+    }
 
     /// Actively prepare/connect the runtime and return capabilities from the verified runtime
     /// handshake. Preflight uses this instead of assuming a disconnected adapter has no features.

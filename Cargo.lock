@@ -1594,12 +1594,19 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
+ "uuid",
  "vibecoder-agent-jcode",
+ "vibecoder-core",
  "vibecoder-domain",
+ "vibecoder-gateway-contract",
+ "vibecoder-gateway-omniroute",
+ "vibecoder-persistence-local",
  "vibecoder-process-contract",
  "vibecoder-process-local",
  "vibecoder-runtime-packaging",
+ "vibecoder-workspace-local",
 ]
 
 [[package]]

@@ -59,6 +59,9 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDir("build/generated/jniLibs")
+            // Part 34.3.3: generated, verified OmniRoute production bundle only.
+            // The reviewed source archive is never packaged into the APK.
+            assets.srcDir("build/generated/omnirouteAssets")
         }
     }
 

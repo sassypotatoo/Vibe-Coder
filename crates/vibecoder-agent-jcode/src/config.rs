@@ -1,5 +1,20 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+pub const VIBECODER_OMNIROUTE_JCODE_API_BASE: &str = "http://127.0.0.1:20128/v1";
+pub const VIBECODER_OMNIROUTE_JCODE_GATEWAY_ID: &str = "omniroute";
+pub const VIBECODER_OMNIROUTE_JCODE_TRANSPORT_PROVIDER: &str = "OpenAI-compatible";
+pub const VIBECODER_BRIDGED_MAX_TOOL_CALLS_PER_TURN: u32 = 32;
+pub const VIBECODER_BRIDGED_FILE_TOOLS: &[&str] = &[
+    "read",
+    "write",
+    "edit",
+    "multiedit",
+    "apply_patch",
+    "patch",
+    "agentgrep",
+    "ls",
+];
 use std::time::Duration;
 use vibecoder_domain::{Result, VibeCoderError};
 
@@ -49,6 +64,36 @@ impl Default for JcodeConnectionMode {
     }
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum JcodeModelGatewayBridge {
+    /// Route Jcode's model traffic only through VibeCoder's same-phone OmniRoute instance.
+    /// The endpoint and deterministic runtime restrictions are fixed by the adapter; no arbitrary
+    /// persisted URL or secret is accepted on this boundary.
+    VibeCoderOmniRouteLoopbackV1,
+}
+
+impl JcodeModelGatewayBridge {
+    pub const fn gateway_id(self) -> &'static str {
+        match self {
+            Self::VibeCoderOmniRouteLoopbackV1 => VIBECODER_OMNIROUTE_JCODE_GATEWAY_ID,
+        }
+    }
+
+    pub const fn api_base(self) -> &'static str {
+        match self {
+            Self::VibeCoderOmniRouteLoopbackV1 => VIBECODER_OMNIROUTE_JCODE_API_BASE,
+        }
+    }
+
+    pub const fn transport_provider(self) -> &'static str {
+        match self {
+            Self::VibeCoderOmniRouteLoopbackV1 => VIBECODER_OMNIROUTE_JCODE_TRANSPORT_PROVIDER,
+        }
+    }
+}
+
 /// Connection options that are safe to persist.
 ///
 /// Provider/API secrets deliberately do not appear here. They belong to the secret-reference
@@ -62,6 +107,9 @@ pub struct JcodeConnectionConfig {
     pub request_timeout_ms: u64,
     #[serde(default)]
     pub connection: JcodeConnectionMode,
+    /// Optional safe model-transport bridge. Contains no credential bytes and no arbitrary URL.
+    #[serde(default)]
+    pub model_gateway_bridge: Option<JcodeModelGatewayBridge>,
 }
 
 impl Default for JcodeConnectionConfig {
@@ -70,6 +118,7 @@ impl Default for JcodeConnectionConfig {
             client_name: default_client_name(),
             request_timeout_ms: DEFAULT_REQUEST_TIMEOUT_MS,
             connection: JcodeConnectionMode::default(),
+            model_gateway_bridge: None,
         }
     }
 }
@@ -88,6 +137,14 @@ impl JcodeConnectionConfig {
             ));
         }
         validate_timeout("request_timeout_ms", self.request_timeout_ms)?;
+
+        if self.model_gateway_bridge.is_some()
+            && !matches!(&self.connection, JcodeConnectionMode::Private { .. })
+        {
+            return Err(VibeCoderError::InvalidRequest(
+                "Jcode model gateway bridge requires a private runtime".into(),
+            ));
+        }
 
         match &self.connection {
             JcodeConnectionMode::Shared {
@@ -139,6 +196,13 @@ impl JcodeConnectionConfig {
             }
         }
         Ok(())
+    }
+
+    pub(crate) const fn model_gateway_transport_provider(&self) -> Option<&'static str> {
+        match self.model_gateway_bridge {
+            Some(bridge) => Some(bridge.transport_provider()),
+            None => None,
+        }
     }
 
     pub(crate) fn request_timeout(&self) -> Duration {
@@ -199,5 +263,22 @@ mod tests {
     #[test]
     fn private_defaults_validate() {
         assert!(JcodeConnectionConfig::default().validate().is_ok());
+    }
+
+    #[test]
+    fn omniroute_bridge_is_fixed_and_requires_private_runtime() {
+        let bridge = JcodeModelGatewayBridge::VibeCoderOmniRouteLoopbackV1;
+        assert_eq!(bridge.gateway_id(), "omniroute");
+        assert_eq!(bridge.api_base(), "http://127.0.0.1:20128/v1");
+        assert_eq!(bridge.transport_provider(), "OpenAI-compatible");
+
+        let mut config = JcodeConnectionConfig::default();
+        config.model_gateway_bridge = Some(bridge);
+        assert!(config.validate().is_ok());
+        config.connection = JcodeConnectionMode::Shared {
+            socket_path: None,
+            ensure_runtime: false,
+        };
+        assert!(config.validate().is_err());
     }
 }

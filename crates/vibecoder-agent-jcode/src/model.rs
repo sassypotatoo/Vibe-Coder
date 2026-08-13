@@ -175,6 +175,7 @@ pub(crate) fn select_model_from_catalog(
     session_id: &SessionId,
     requested: &ModelRef,
     catalog: &[ModelRef],
+    bridge_transport_provider: Option<&str>,
 ) -> Result<()> {
     validate_model_ref(requested)?;
     let available = catalog
@@ -186,7 +187,13 @@ pub(crate) fn select_model_from_catalog(
             )
         })?;
 
-    if let Some(expected_provider) = requested.provider.as_deref() {
+    if let Some(transport_provider) = bridge_transport_provider {
+        if available.provider.as_deref() != Some(transport_provider) {
+            return Err(VibeCoderError::InvalidRequest(
+                "Jcode bridged model route does not report the expected transport provider".into(),
+            ));
+        }
+    } else if let Some(expected_provider) = requested.provider.as_deref() {
         match available.provider.as_deref() {
             Some(actual_provider) if actual_provider == expected_provider => {}
             Some(_) => {
@@ -218,6 +225,7 @@ pub(crate) fn verify_active_model(
     client: &JcodeClient,
     session_id: &SessionId,
     requested: &ModelRef,
+    bridge_transport_provider: Option<&str>,
 ) -> Result<ModelRef> {
     validate_model_ref(requested)?;
     let runtime = client
@@ -243,6 +251,20 @@ pub(crate) fn verify_active_model(
             "Jcode fresh active-provider probe did not report a provider identity".into(),
         )
     })?;
+    if let Some(transport_provider) = bridge_transport_provider {
+        if active_provider != transport_provider {
+            return Err(VibeCoderError::Agent(
+                "Jcode fresh active-provider probe does not match the attested gateway transport provider".into(),
+            ));
+        }
+        // The gateway catalog remains authority for the upstream provider metadata. Jcode only
+        // attests that this exact model id is active over the fixed OpenAI-compatible transport.
+        return Ok(ModelRef {
+            id: active_model,
+            display_name: requested.display_name.clone(),
+            provider: requested.provider.clone(),
+        });
+    }
     if requested.provider.as_deref() != Some(active_provider.as_str()) {
         return Err(VibeCoderError::Agent(
             "Jcode fresh active-provider probe does not match the requested model provider".into(),

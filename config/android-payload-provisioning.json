@@ -1,57 +1,63 @@
 {
-  "schema": 1,
-  "target": {
-    "os": "android",
-    "abi": "arm64-v8a",
-    "rust_target": "aarch64-linux-android",
-    "min_sdk": 29,
-    "target_sdk": 36
-  },
   "android_build": {
     "agp": "9.3.0",
+    "build_tools": "36.0.0",
+    "cmake": "3.22.1",
+    "compile_sdk": 36,
     "gradle": "9.5.0",
     "jdk_major": 17,
-    "compile_sdk": 36,
-    "build_tools": "36.0.0",
-    "ndk": "28.2.13676358",
-    "cmake": "3.22.1"
+    "ndk": "28.2.13676358"
   },
   "payloads": [
     {
+      "build": "cargo aarch64-linux-android release",
       "component_id": "vibecoder_core",
       "output": "libvibecoder_android_host.so",
       "source": "workspace",
-      "build": "cargo aarch64-linux-android release",
       "status": "build_required"
     },
     {
+      "build_profile": "release_no_default_features",
       "component_id": "jcode",
       "output": "libvibecoder_jcode_exec.so",
-      "version": "0.73.0",
-      "status": "exact_source_checkout_required_for_android_cross_compile",
+      "reviewed_vendored_boundary_archive": "jcode-master.zip",
+      "reviewed_vendored_boundary_archive_sha256": "dd6efc76c253a4a5d9ea35ec640f80980b898f1f98a6db0671d0efefa8b141f2",
+      "rust_target": "aarch64-linux-android",
+      "source_commit": "44ffa55281fad71c02be984c0674d92412210452",
       "source_repository": "https://github.com/1jehuang/jcode.git",
       "source_tag": "v0.73.0",
-      "source_commit": "44ffa55281fad71c02be984c0674d92412210452",
-      "rust_target": "aarch64-linux-android",
-      "build_profile": "release_no_default_features",
-      "reviewed_vendored_boundary_archive": "jcode-master.zip",
-      "reviewed_vendored_boundary_archive_sha256": "dd6efc76c253a4a5d9ea35ec640f80980b898f1f98a6db0671d0efefa8b141f2"
+      "status": "exact_source_checkout_required_for_android_cross_compile",
+      "version": "0.73.0"
     },
     {
       "component_id": "node",
       "output": "libvibecoder_node_exec.so",
-      "source_url": "https://nodejs.org/download/release/v24.19.0/node-v24.19.0.tar.xz",
-      "version": "24.19.0",
       "sha256": "f6d95e10a0431ee1067fc6aabe9f762908b4716dd35324e1ddb4b1466b76659f",
-      "status": "source_build_required_android_experimental"
+      "source_url": "https://nodejs.org/download/release/v24.19.0/node-v24.19.0.tar.xz",
+      "status": "source_build_required_android_experimental",
+      "version": "24.19.0"
     },
     {
-      "component_id": "omniroute",
       "asset": "omniroute/bundle",
-      "source_archive": "OmniRoute-release-v3.8.50.zip",
-      "version": "3.8.50",
+      "bundle_manifest": "omniroute/bundle/.vibecoder-omniroute-bundle.json",
+      "component_id": "omniroute",
+      "runtime_profile": "config/omniroute-android-runtime-profile.json",
       "sha256": "1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7",
-      "status": "reviewed_archive_required_not_present"
+      "source_archive": "OmniRoute-release-v3.8.50.zip",
+      "status": "reviewed_source_verified_android_runtime_build_required",
+      "version": "3.8.50",
+      "source_repository": "https://github.com/diegosouzapw/OmniRoute",
+      "source_ref": "release/v3.8.50",
+      "reviewed_git_commit": "ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f",
+      "reviewed_archive_sha256": "1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7"
     }
-  ]
+  ],
+  "schema": 1,
+  "target": {
+    "abi": "arm64-v8a",
+    "min_sdk": 29,
+    "os": "android",
+    "rust_target": "aarch64-linux-android",
+    "target_sdk": 36
+  }
 }

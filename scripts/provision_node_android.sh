@@ -5,19 +5,49 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="24.19.0"
 SHA256="f6d95e10a0431ee1067fc6aabe9f762908b4716dd35324e1ddb4b1466b76659f"
 URL="https://nodejs.org/download/release/v${VERSION}/node-v${VERSION}.tar.xz"
+NDK_REVISION_REQUIRED="28.2.13676358"
 NDK_ROOT="${ANDROID_NDK_ROOT:-${ANDROID_NDK_HOME:-}}"
 API="${VIBECODER_ANDROID_API:-29}"
 JOBS="${VIBECODER_BUILD_JOBS:-4}"
 CACHE="${VIBECODER_RUNTIME_CACHE:-$ROOT/.runtime-cache}"
 ARCHIVE="$CACHE/node-v${VERSION}.tar.xz"
 WORK="$CACHE/node-v${VERSION}-android-arm64"
-DEST_NATIVE="$ROOT/android/app/src/main/jniLibs/arm64-v8a/libvibecoder_node_exec.so"
-DEST_NPM="$ROOT/android/app/src/main/assets/node/npm"
+DEST_NATIVE="$ROOT/android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so"
+OUTPUT_DIR="$ROOT/android/app/build/outputs"
+CONFIGURE_LOG="$OUTPUT_DIR/vibecoder-part34-node-configure.log"
+BUILD_LOG="$OUTPUT_DIR/vibecoder-part34-node-make.log"
+CROSS_EVIDENCE="$OUTPUT_DIR/vibecoder-part34-node-cross-build-evidence.json"
 
 fail() { printf 'provision_node_android: %s\n' "$1" >&2; exit 1; }
-for tool in python3 make sha256sum tar; do command -v "$tool" >/dev/null 2>&1 || fail "tool_missing:$tool"; done
+for tool in python3 make sha256sum tar xz awk; do
+  command -v "$tool" >/dev/null 2>&1 || fail "tool_missing:$tool"
+done
 [[ -n "$NDK_ROOT" && -d "$NDK_ROOT" ]] || fail "android_ndk_root_missing"
-mkdir -p "$CACHE"
+[[ -f "$NDK_ROOT/source.properties" ]] || fail "android_ndk_source_properties_missing"
+ACTUAL_NDK_REVISION="$(awk -F= '/^[[:space:]]*Pkg\.Revision[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2; exit}' "$NDK_ROOT/source.properties")"
+[[ -n "$ACTUAL_NDK_REVISION" ]] || fail "android_ndk_revision_unreadable"
+[[ "$ACTUAL_NDK_REVISION" == "$NDK_REVISION_REQUIRED" ]] || \
+  fail "android_ndk_revision_mismatch:expected=${NDK_REVISION_REQUIRED}:actual=${ACTUAL_NDK_REVISION}"
+[[ "$API" =~ ^[0-9]+$ ]] || fail "android_api_not_integer:$API"
+[[ "$API" == "29" ]] || fail "android_api_mismatch:expected=29:actual=$API"
+[[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || fail "build_jobs_invalid:$JOBS"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) NDK_HOST_TAG="linux-x86_64" ;;
+  Darwin-x86_64|Darwin-arm64) NDK_HOST_TAG="darwin-x86_64" ;;
+  *) fail "unsupported_node_android_build_host:$(uname -s)-$(uname -m)" ;;
+esac
+NDK_TOOLCHAIN_BIN="$NDK_ROOT/toolchains/llvm/prebuilt/$NDK_HOST_TAG/bin"
+NDK_CC="$NDK_TOOLCHAIN_BIN/aarch64-linux-android${API}-clang"
+NDK_CXX="$NDK_TOOLCHAIN_BIN/aarch64-linux-android${API}-clang++"
+[[ -x "$NDK_CC" ]] || fail "android_ndk_c_compiler_missing:$NDK_CC"
+[[ -x "$NDK_CXX" ]] || fail "android_ndk_cxx_compiler_missing:$NDK_CXX"
+python3 - <<'PY' || fail "python_version_unsupported_by_node_android_configure"
+import sys
+if sys.version_info[:2] not in {(3, 9), (3, 10), (3, 11), (3, 12), (3, 13), (3, 14)}:
+    raise SystemExit(1)
+PY
+
+mkdir -p "$CACHE" "$OUTPUT_DIR"
 
 if [[ ! -f "$ARCHIVE" ]]; then
   command -v curl >/dev/null 2>&1 || fail "curl_missing_and_archive_not_cached"
@@ -31,15 +61,45 @@ mkdir -p "$WORK"
 tar --extract --xz --file "$ARCHIVE" --directory "$WORK" --strip-components=1 --no-same-owner --no-same-permissions
 cd "$WORK"
 [[ -x ./android-configure ]] || fail "node_android_configure_missing"
-# Node upstream documents Android as experimental/unsupported; this build is therefore evidence only,
-# never proof until Part-27 probes pass on the physical target device.
-./android-configure "$NDK_ROOT" "$API" arm64
-make -j"$JOBS"
-[[ -f out/Release/node ]] || fail "node_android_output_missing"
-[[ -d deps/npm ]] || fail "node_npm_bundle_missing"
 
-mkdir -p "$(dirname "$DEST_NATIVE")" "$(dirname "$DEST_NPM")"
-rm -rf "$DEST_NPM"
-install -m 0644 out/Release/node "$DEST_NATIVE"
-cp -R deps/npm "$DEST_NPM"
-printf 'staged %s\nstaged %s\n' "$DEST_NATIVE" "$DEST_NPM"
+# Node upstream still classifies Android as unsupported/experimental. This is therefore an evidence
+# build, not a readiness claim. Keep stdout/stderr so the first real compiler/linker failure can be
+# diagnosed instead of reduced to a generic CI red X.
+set +e
+./android-configure "$NDK_ROOT" "$API" arm64 2>&1 | tee "$CONFIGURE_LOG"
+CONFIGURE_STATUS=${PIPESTATUS[0]}
+set -e
+if (( CONFIGURE_STATUS != 0 )); then
+  fail "node_android_configure_failed:status=${CONFIGURE_STATUS}:log=${CONFIGURE_LOG}"
+fi
+# Upstream android_configure.py historically invokes ./configure through os.system without reliably
+# making that inner command's status the wrapper status. Never accept wrapper exit 0 by itself.
+python3 "$ROOT/scripts/verify_node_android_configure_output.py" "$WORK/config.gypi" "$WORK/Makefile" \
+  || fail "node_android_configure_output_invalid:log=${CONFIGURE_LOG}"
+
+set +e
+make -j"$JOBS" 2>&1 | tee "$BUILD_LOG"
+BUILD_STATUS=${PIPESTATUS[0]}
+set -e
+if (( BUILD_STATUS != 0 )); then
+  fail "node_android_make_failed:status=${BUILD_STATUS}:log=${BUILD_LOG}"
+fi
+
+SOURCE="out/Release/node"
+[[ -f "$SOURCE" && -s "$SOURCE" ]] || fail "node_android_output_missing"
+
+# Fail before staging if the produced executable is not Android/Bionic AArch64 PIE with the same
+# 16 KiB ELF compatibility contract used by the other packaged child runtimes. NDK r28+ should
+# provide 16 KiB ELF alignment by default, but evidence wins over assumptions.
+python3 "$ROOT/scripts/verify_android_elf.py" "$SOURCE" >/dev/null || fail "node_android_elf_verification_failed"
+
+# Node is a generated native payload. Never mutate source jniLibs or source assets here. npm is a
+# separate website-build capability and is intentionally not staged by this Node-only step.
+mkdir -p "$(dirname "$DEST_NATIVE")"
+install -m 0644 "$SOURCE" "$DEST_NATIVE"
+python3 "$ROOT/scripts/verify_android_elf.py" "$DEST_NATIVE" >/dev/null || fail "staged_node_android_elf_verification_failed"
+
+python3 "$ROOT/scripts/write_node_cross_build_evidence.py" \
+  "$DEST_NATIVE" "$ARCHIVE" "$NDK_ROOT" "$API" "$CONFIGURE_LOG" "$BUILD_LOG" "$CROSS_EVIDENCE"
+printf 'staged %s\n' "$DEST_NATIVE"
+printf 'cross-build evidence %s\n' "$CROSS_EVIDENCE"

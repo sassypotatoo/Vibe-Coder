@@ -11,6 +11,7 @@ const USER_AGENT: &str = concat!("vibecoder/", env!("CARGO_PKG_VERSION"));
 enum ApiEndpoint {
     Models,
     RuntimeProfile,
+    ChatCompletions,
 }
 
 impl ApiEndpoint {
@@ -18,6 +19,7 @@ impl ApiEndpoint {
         match self {
             Self::Models => "models",
             Self::RuntimeProfile => "vibecoder/runtime-profile",
+            Self::ChatCompletions => "chat/completions",
         }
     }
 }
@@ -91,6 +93,7 @@ impl OmniRouteClient {
             .await
     }
 
+
     /// OmniRoute 3.8.50 implements HEAD /v1/models as an unconditional availability probe.
     /// It must never be treated as proof that Bearer auth or catalog access succeeded.
     #[allow(
@@ -103,10 +106,64 @@ impl OmniRouteClient {
             .await
     }
 
+
     fn endpoint_url(&self, endpoint: ApiEndpoint) -> Result<Url> {
         self.api_base
             .join(endpoint.relative_path())
             .map_err(|_| gateway_error("endpoint_join_failed"))
+    }
+
+    pub(crate) async fn post_chat_completion_raw(
+        &self,
+        auth: RequestAuth<'_>,
+        json_body: &[u8],
+    ) -> Result<RawGatewayResponse> {
+        self.send_bounded_json_post(ApiEndpoint::ChatCompletions, auth, json_body)
+            .await
+    }
+
+    async fn send_bounded_json_post(
+        &self,
+        endpoint: ApiEndpoint,
+        auth: RequestAuth<'_>,
+        json_body: &[u8],
+    ) -> Result<RawGatewayResponse> {
+        const MAX_REQUEST_BYTES: usize = 512 * 1024;
+        if json_body.is_empty() || json_body.len() > MAX_REQUEST_BYTES {
+            return Err(gateway_error("request_body_size_invalid"));
+        }
+        let url = self.endpoint_url(endpoint)?;
+        let mut request = self
+            .http
+            .post(url)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .body(json_body.to_vec());
+        if let Some(token) = bearer_token(auth)? {
+            request = request.bearer_auth(token);
+        }
+        let mut response = request.send().await.map_err(map_reqwest_error)?;
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        if let Some(length) = response.content_length() {
+            if length > self.max_response_bytes as u64 {
+                return Err(gateway_error("response_too_large"));
+            }
+        }
+        let body = if status == StatusCode::NO_CONTENT {
+            Vec::new()
+        } else {
+            read_bounded_body(&mut response, self.max_response_bytes).await?
+        };
+        Ok(RawGatewayResponse {
+            status: status.as_u16(),
+            content_type,
+            body,
+        })
     }
 
     async fn send_bounded(
@@ -212,6 +269,13 @@ mod tests {
                 .unwrap()
                 .as_str(),
             "http://127.0.0.1:20128/v1/vibecoder/runtime-profile"
+        );
+        assert_eq!(
+            client
+                .endpoint_url(ApiEndpoint::ChatCompletions)
+                .unwrap()
+                .as_str(),
+            "http://127.0.0.1:20128/v1/chat/completions"
         );
     }
 }

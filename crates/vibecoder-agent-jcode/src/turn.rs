@@ -3,7 +3,7 @@ use crate::permission::{
 };
 use jcode_sdk::{ApiEvent, JcodeClient, RunOptions};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use vibecoder_agent_contract::EventHandler;
 use vibecoder_domain::{
@@ -215,11 +215,21 @@ impl Drop for ActiveTurnLease {
 #[derive(Clone)]
 pub(crate) struct TurnSafetyState {
     permission_protocol_failure: Arc<AtomicBool>,
+    tool_limit_exceeded: Arc<AtomicBool>,
+    tool_policy_failure: Arc<AtomicBool>,
 }
 
 impl TurnSafetyState {
     pub(crate) fn permission_protocol_failure(&self) -> bool {
         self.permission_protocol_failure.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn tool_limit_exceeded(&self) -> bool {
+        self.tool_limit_exceeded.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn tool_policy_failure(&self) -> bool {
+        self.tool_policy_failure.load(Ordering::Acquire)
     }
 }
 
@@ -269,11 +279,17 @@ pub(crate) fn run_options(
     permissions_supported: bool,
     connection_generation: u64,
     permissions: Arc<PermissionRegistry>,
+    max_tool_calls: Option<u32>,
+    allowed_tools: Option<&'static [&'static str]>,
 ) -> (RunOptions, TurnSafetyState) {
     let handler = Mutex::new(on_event);
     let safety = TurnSafetyState {
         permission_protocol_failure: Arc::new(AtomicBool::new(false)),
+        tool_limit_exceeded: Arc::new(AtomicBool::new(false)),
+        tool_policy_failure: Arc::new(AtomicBool::new(false)),
     };
+    let tool_calls_seen = Arc::new(AtomicU32::new(0));
+    let callback_tool_calls_seen = Arc::clone(&tool_calls_seen);
     let callback_safety = safety.clone();
     let callback_session = expected_session.clone();
     let callback_permissions = Arc::clone(&permissions);
@@ -367,6 +383,34 @@ pub(crate) fn run_options(
                     }
                 }
                 return;
+            }
+
+            if let ApiEvent::ToolStart {
+                session_id, name, ..
+            } = event
+            {
+                if session_id == &callback_session.0 {
+                    if let Some(allowed) = allowed_tools {
+                        if !allowed.iter().any(|candidate| *candidate == name.as_str()) {
+                            callback_safety
+                                .tool_policy_failure
+                                .store(true, Ordering::Release);
+                            let _ = safety_client.cancel(&callback_session.0);
+                            return;
+                        }
+                    }
+                    if let Some(limit) = max_tool_calls {
+                        let observed =
+                            callback_tool_calls_seen.fetch_add(1, Ordering::AcqRel) + 1;
+                        if observed > limit {
+                            callback_safety
+                                .tool_limit_exceeded
+                                .store(true, Ordering::Release);
+                            let _ = safety_client.cancel(&callback_session.0);
+                            return;
+                        }
+                    }
+                }
             }
 
             let Some(mapped) = map_stream_event(&expected_session, event) else {
