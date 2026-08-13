@@ -1,0 +1,12 @@
+{
+  "alias": "vibecoder-diagnostic",
+  "certificate_sha256": "9d73bfaeb16e706723bfc417ce43a9ed6b10286835e8a3050a8ddded67506445",
+  "keystore": "android/signing/vibecoder-diagnostic-debug.jks",
+  "keystore_sha256": "8144fe738427be8e69e2a880fcefa170daecbddaad3929f7639d628bb14395a6",
+  "part": 31,
+  "production_release_signing_allowed": false,
+  "purpose": "diagnostic_debug_only_never_release_signing",
+  "schema": 1,
+  "store_type": "JKS",
+  "upgrade_identity_required": true
+}

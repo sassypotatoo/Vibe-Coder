@@ -1,0 +1,131 @@
+{
+  "build": {
+    "build_command": [
+      "npm",
+      "run",
+      "build:backend"
+    ],
+    "environment": {
+      "OMNIROUTE_BUILD_BACKEND_ONLY": "1",
+      "OMNIROUTE_BUILD_PROFILE": "minimal",
+      "OMNIROUTE_MITM_STUB": "1",
+      "VECTOR_STORE_DISABLE_VEC": "true",
+      "ELECTRON_SKIP_BINARY_DOWNLOAD": "1",
+      "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1",
+      "PUPPETEER_SKIP_DOWNLOAD": "1",
+      "CYPRESS_INSTALL_BINARY": "0",
+      "npm_config_audit": "false",
+      "npm_config_fund": "false"
+    },
+    "npm_command": [
+      "npm",
+      "ci"
+    ],
+    "required_node_version": "24.19.0"
+  },
+  "feature_degradations": {
+    "browser_automation": "disabled",
+    "cursor_image_reencoding": "disabled because sharp has no reviewed Android runtime",
+    "llmlingua_onnx": "disabled because onnxruntime-node has no Android runtime",
+    "mitm_tproxy": "disabled",
+    "sqlite_driver": "node:sqlite with sql.js WASM fallback",
+    "tls_fingerprint_clients": "wreq-js/tls-client-node unavailable",
+    "vector_memory": "sqlite-vec disabled; FTS5 keyword fallback"
+  },
+  "forbidden_native_extensions": [
+    ".node",
+    ".so",
+    ".dylib",
+    ".dll",
+    ".exe"
+  ],
+  "forbidden_package_prefixes": [
+    "@anthropic-ai/claude-agent-sdk-",
+    "@esbuild/",
+    "@img/",
+    "@libsql/darwin-",
+    "@libsql/linux-",
+    "@libsql/win32-",
+    "@napi-rs/canvas-",
+    "@next/swc-",
+    "@ngrok/ngrok-",
+    "@openai/codex-",
+    "@oven/bun-",
+    "@oxc-parser/binding-",
+    "@oxc-resolver/binding-",
+    "@parcel/watcher-",
+    "@rolldown/binding-",
+    "@rollup/rollup-",
+    "@swc/core-",
+    "@tailwindcss/oxide-",
+    "@unrs/resolver-binding-",
+    "@yuku-analyzer/binding-",
+    "lightningcss-darwin-",
+    "lightningcss-freebsd-",
+    "lightningcss-linux-",
+    "lightningcss-win32-",
+    "opencode-darwin-",
+    "opencode-linux-",
+    "opencode-windows-",
+    "sqlite-vec-darwin-",
+    "sqlite-vec-linux-",
+    "sqlite-vec-windows-"
+  ],
+  "forbidden_package_roots": [
+    "@atjsh/llmlingua-2",
+    "@huggingface/transformers",
+    "better-sqlite3",
+    "bun",
+    "fsevents",
+    "keytar",
+    "koffi",
+    "libsql",
+    "libxmljs2",
+    "onnxruntime-node",
+    "opencode-ai",
+    "playwright-core",
+    "sharp",
+    "sqlite-vec",
+    "tls-client-node",
+    "wreq-js"
+  ],
+  "forbidden_relative_roots": [
+    "src/mitm/tproxy/native"
+  ],
+  "profile_id": "vibecoder-omniroute-android-backend-v1",
+  "required_paths": [
+    "server.js",
+    "server-ws.mjs",
+    "package.json",
+    "build/runtime-env.mjs",
+    "build/bootstrap-env.mjs",
+    "healthcheck.mjs",
+    "migrations",
+    "node_modules/sql.js/package.json"
+  ],
+  "runtime": {
+    "bind_host": "127.0.0.1",
+    "data_dir_policy": "runtime_service_private",
+    "entrypoint": "server-ws.mjs",
+    "environment": {
+      "API_PORT": "20128",
+      "DASHBOARD_PORT": "20128",
+      "HOSTNAME": "127.0.0.1",
+      "NODE_ENV": "production",
+      "OMNIROUTE_MEMORY_MB": "512",
+      "OMNIROUTE_MITM_STUB": "1",
+      "OMNIROUTE_PORT": "20128",
+      "PORT": "20128",
+      "VECTOR_STORE_DISABLE_VEC": "true"
+    },
+    "port": 20128,
+    "working_directory": "omniroute"
+  },
+  "schema": 1,
+  "source": {
+    "reviewed_archive_sha256": "1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7",
+    "routing_patch_profile_id": "vibecoder-omniroute-exact-model-v1",
+    "routing_patch_profile_sha256": "aec0f63fb0dec08f24fffde9209504ec447e9428bec1cd64c033649ed275fe3d",
+    "version": "3.8.50"
+  }
+}

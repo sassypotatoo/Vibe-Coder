@@ -1,0 +1,463 @@
+name: Android diagnostic APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "android/**"
+      - "crates/vibecoder-android-host/**"
+      - "crates/vibecoder-core/**"
+      - "crates/vibecoder-agent-contract/**"
+      - "crates/vibecoder-agent-jcode/**"
+      - "crates/vibecoder-task-orchestration/**"
+      - "crates/vibecoder-gateway-contract/**"
+      - "crates/vibecoder-gateway-omniroute/**"
+      - "crates/vibecoder-runtime-packaging/**"
+      - "PROJECT_STATE.json"
+      - "PART34_STATE.json"
+      - "scripts/**"
+      - "config/android-*.json"
+      - "config/omniroute-android-runtime-profile.json"
+      - ".github/workflows/android-diagnostic-apk.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "android/**"
+      - "crates/vibecoder-android-host/**"
+      - "crates/vibecoder-core/**"
+      - "crates/vibecoder-agent-contract/**"
+      - "crates/vibecoder-agent-jcode/**"
+      - "crates/vibecoder-task-orchestration/**"
+      - "crates/vibecoder-gateway-contract/**"
+      - "crates/vibecoder-gateway-omniroute/**"
+      - "crates/vibecoder-runtime-packaging/**"
+      - "PROJECT_STATE.json"
+      - "PART34_STATE.json"
+      - "scripts/build_android_host.sh"
+      - "scripts/build_android_shell.sh"
+      - "scripts/build_jcode_android.sh"
+      - "scripts/provision_node_android.sh"
+      - "scripts/part34_node_execute_cross_build.sh"
+      - "scripts/write_node_cross_build_attempt.py"
+      - "scripts/bootstrap_pinned_android_ndk_r28c.sh"
+      - "scripts/part34_node_build_and_verify.sh"
+      - "scripts/write_node_build_evidence.py"
+      - "scripts/write_node_cross_build_evidence.py"
+      - "scripts/verify_node_cross_build_evidence.py"
+      - "scripts/verify_node_android_configure_output.py"
+      - "scripts/verify_node_android_toolchain_split.py"
+      - "scripts/sanitize_node_android_host_makefiles.py"
+      - "scripts/test_part34_10_compile_repairs.py"
+      - "scripts/verify_jcode_android_source.sh"
+      - "scripts/verify_android_elf.py"
+      - "scripts/verify_android_diagnostic_apk.sh"
+      - "scripts/test_android_diagnostic_device.sh"
+      - "scripts/part31_build_and_verify.sh"
+      - "scripts/write_android_build_evidence.py"
+      - "scripts/validate_checkpoint.py"
+      - "scripts/prepare_omniroute_android_source.py"
+      - "scripts/validate_part34_3.py"
+      - "scripts/validate_part34_4.py"
+      - "scripts/validate_part34_5.py"
+      - "scripts/test_part34_5_inference_tools.py"
+      - "scripts/validate_part34_6.py"
+      - "scripts/test_part34_6_controller_tools.py"
+      - "scripts/validate_part34_7.py"
+      - "scripts/test_part34_7_jcode_bridge_tools.py"
+      - "scripts/validate_part34_8.py"
+      - "scripts/test_part34_8_agent_action_tools.py"
+      - "scripts/validate_part34_9.py"
+      - "scripts/test_part34_9_loop_tools.py"
+      - "scripts/validate_part34_10.py"
+      - "scripts/test_part34_10_ui_tools.py"
+      - "scripts/test_part34_10_alpha_package_tools.py"
+      - "scripts/part34_10_strict_java_compile.sh"
+      - "scripts/fetch_omniroute_reviewed_archive.sh"
+      - "scripts/part34_alpha_build_and_verify.sh"
+      - "scripts/write_alpha_build_evidence.py"
+      - "docs/PART34_7_JCODE_MODEL_TOOL_BRIDGE.md"
+      - "docs/PART34_8_FIRST_AGENT_ACTION_TURN.md"
+      - "docs/PART34_9_EXPLICIT_AGENT_LOOP.md"
+      - "docs/PART34_10_ALPHA_MOBILE_UI.md"
+      - "docs/PART34_5_FIRST_MODEL_REQUEST.md"
+      - "docs/PART34_6_CONVERSATION_MODEL_CONTROLLER.md"
+      - "third_party/provenance/omniroute-3.8.50-reviewed.json"
+      - "docs/PART34_3_OMNIROUTE_ANDROID_PACKAGING.md"
+      - "config/android-runtime-inventory.json"
+      - "config/android-payload-provisioning.json"
+      - "config/android-diagnostic-signing.json"
+      - "config/omniroute-android-runtime-profile.json"
+      - ".github/workflows/android-diagnostic-apk.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANDROID_PLATFORM: "36"
+  ANDROID_BUILD_TOOLS: "36.0.0"
+  ANDROID_NDK_VERSION: "28.2.13676358"
+  ANDROID_CMAKE_VERSION: "3.22.1"
+  VIBECODER_ANDROID_API: "29"
+
+jobs:
+  minimal-shell:
+    name: Minimal diagnostic APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4.0.1
+        with:
+          cmdline-tools-version: "15859902"
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install pinned Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: aarch64-linux-android
+
+      - uses: gradle/actions/setup-gradle@v6.2.0
+        with:
+          gradle-version: "9.5.0"
+          cache-provider: basic
+
+      - name: Validate source checkpoint
+        shell: bash
+        run: python3 scripts/validate_checkpoint.py
+
+      - name: Validate Part 34 runtime/gateway/inference contracts
+        shell: bash
+        run: |
+          python3 scripts/validate_part34_3.py
+          python3 scripts/test_part34_3_bundle_tools.py
+          python3 scripts/test_part34_3_asset_tools.py
+          python3 scripts/test_part34_3_service_tools.py
+          python3 scripts/validate_part34_4.py
+          python3 scripts/validate_part34_5.py
+          python3 scripts/test_part34_5_inference_tools.py
+          python3 scripts/validate_part34_6.py
+          python3 scripts/test_part34_6_controller_tools.py
+          python3 scripts/validate_part34_7.py
+          python3 scripts/test_part34_7_jcode_bridge_tools.py
+          python3 scripts/validate_part34_8.py
+          python3 scripts/test_part34_8_agent_action_tools.py
+          python3 scripts/validate_part34_9.py
+          python3 scripts/test_part34_9_loop_tools.py
+          python3 scripts/validate_part34_10.py
+          python3 scripts/test_part34_10_ui_tools.py
+          python3 scripts/test_part34_10_alpha_package_tools.py
+          python3 scripts/test_part34_10_compile_repairs.py
+
+      - name: Strict Java 17 compile gate
+        shell: bash
+        run: bash scripts/part34_10_strict_java_compile.sh
+
+      - name: Build and verify minimal APK
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          bash scripts/part31_build_and_verify.sh minimal
+
+      - name: Upload minimal APK + evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part31-minimal-diagnostic-apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/vibecoder-part31-build-evidence.json
+          if-no-files-found: error
+          retention-days: 7
+
+  jcode-android-proof-build:
+    name: Exact Jcode Android cross-compile + APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4.0.1
+        with:
+          cmdline-tools-version: "15859902"
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install pinned Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.91.0"
+          targets: aarch64-linux-android
+
+      - uses: gradle/actions/setup-gradle@v6.2.0
+        with:
+          gradle-version: "9.5.0"
+          cache-provider: basic
+
+      - name: Fetch and verify exact Jcode source
+        shell: bash
+        run: bash scripts/fetch_jcode_android_source.sh "${RUNNER_TEMP}/jcode-v0.73.0"
+
+      - name: Cross-compile Jcode for Android Bionic
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          export VIBECODER_JCODE_TARGET_DIR="${RUNNER_TEMP}/jcode-target"
+          bash scripts/build_jcode_android.sh "${RUNNER_TEMP}/jcode-v0.73.0"
+
+      - name: Validate source checkpoint
+        shell: bash
+        run: python3 scripts/validate_checkpoint.py
+
+      - name: Build and verify APK with packaged Jcode
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          bash scripts/part31_build_and_verify.sh jcode
+
+      - name: Upload Jcode diagnostic APK + evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part31-jcode-diagnostic-apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/vibecoder-part31-build-evidence.json
+            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_jcode_exec.so
+          if-no-files-found: error
+          retention-days: 7
+  node-android-proof-build:
+    name: Exact Node 24.19.0 Android cross-compile + APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4.0.1
+        with:
+          cmdline-tools-version: "15859902"
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install pinned Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: aarch64-linux-android
+
+      - uses: gradle/actions/setup-gradle@v6.2.0
+        with:
+          gradle-version: "9.5.0"
+          cache-provider: basic
+
+      - name: Validate source checkpoint before Node build
+        shell: bash
+        run: python3 scripts/validate_checkpoint.py
+
+      - name: Cross-compile exact Node source for Android Bionic
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          export VIBECODER_ANDROID_API="29"
+          export VIBECODER_BUILD_JOBS="2"
+          bash scripts/part34_node_execute_cross_build.sh
+
+      - name: Build and verify APK with evidenced Node candidate
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          bash scripts/part34_node_build_and_verify.sh
+
+      - name: Upload Node APK + cross-build evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part34-node-android-proof-build
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/vibecoder-part34-node-build-evidence.json
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so
+            android/app/build/outputs/vibecoder-part34-node-configure.log
+            android/app/build/outputs/vibecoder-part34-node-make.log
+            android/app/build/outputs/vibecoder-part34-node-execution.log
+            android/app/build/outputs/vibecoder-part34-node-execution-attempt.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Node failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part34-node-failure-logs
+          path: |
+            android/app/build/outputs/vibecoder-part34-node-configure.log
+            android/app/build/outputs/vibecoder-part34-node-make.log
+            android/app/build/outputs/vibecoder-part34-node-execution.log
+            android/app/build/outputs/vibecoder-part34-node-execution-attempt.json
+          if-no-files-found: warn
+          retention-days: 7
+
+
+
+  full-alpha-package:
+    name: Full Alpha APK (Jcode + Node + OmniRoute)
+    needs: [jcode-android-proof-build, node-android-proof-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: "24.19.0"
+          package-manager-cache: false
+
+      - uses: android-actions/setup-android@v4.0.1
+        with:
+          cmdline-tools-version: "15859902"
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install pinned Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - uses: dtolnay/rust-toolchain@1.91.0
+        with:
+          targets: aarch64-linux-android
+
+      - uses: gradle/actions/setup-gradle@v6.2.0
+        with:
+          gradle-version: "9.5.0"
+          cache-provider: basic
+
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: vibecoder-part31-jcode-diagnostic-apk
+          path: ${{ runner.temp }}/jcode-artifact
+
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: vibecoder-part34-node-android-proof-build
+          path: ${{ runner.temp }}/node-artifact
+
+      - name: Stage exact proven Jcode + Node payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST="android/app/build/generated/jniLibs/arm64-v8a"
+          mkdir -p "$DEST" android/app/build/outputs
+          JCODE="$(find "${RUNNER_TEMP}/jcode-artifact" -type f -name libvibecoder_jcode_exec.so -print -quit)"
+          JCODE_EVIDENCE="$(find "${RUNNER_TEMP}/jcode-artifact" -type f -name vibecoder-part31-build-evidence.json -print -quit)"
+          NODE="$(find "${RUNNER_TEMP}/node-artifact" -type f -name libvibecoder_node_exec.so -print -quit)"
+          NODE_EVIDENCE="$(find "${RUNNER_TEMP}/node-artifact" -type f -name vibecoder-part34-node-cross-build-evidence.json -print -quit)"
+          test -n "$JCODE" -a -s "$JCODE"
+          test -n "$JCODE_EVIDENCE" -a -s "$JCODE_EVIDENCE"
+          test -n "$NODE" -a -s "$NODE"
+          test -n "$NODE_EVIDENCE" -a -s "$NODE_EVIDENCE"
+          install -m 0644 "$JCODE" "$DEST/libvibecoder_jcode_exec.so"
+          install -m 0644 "$NODE" "$DEST/libvibecoder_node_exec.so"
+          install -m 0644 "$JCODE_EVIDENCE" android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
+          install -m 0644 "$NODE_EVIDENCE" android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+          python3 scripts/verify_android_elf.py "$DEST/libvibecoder_jcode_exec.so" >/dev/null
+          python3 scripts/verify_android_elf.py "$DEST/libvibecoder_node_exec.so" >/dev/null
+          python3 scripts/verify_node_cross_build_evidence.py \
+            "$DEST/libvibecoder_node_exec.so" \
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+
+      - name: Reproduce exact reviewed OmniRoute archive
+        shell: bash
+        run: bash scripts/fetch_omniroute_reviewed_archive.sh "${RUNNER_TEMP}/OmniRoute-release-v3.8.50.zip"
+
+      - name: Final source and Java gates
+        shell: bash
+        run: |
+          python3 scripts/validate_checkpoint.py
+          python3 scripts/validate_part34_3.py
+          python3 scripts/test_part34_3_bundle_tools.py
+          python3 scripts/test_part34_3_asset_tools.py
+          python3 scripts/test_part34_3_service_tools.py
+          python3 scripts/validate_part34_10.py
+          python3 scripts/test_part34_10_ui_tools.py
+          python3 scripts/test_part34_10_alpha_package_tools.py
+          python3 scripts/test_part34_10_compile_repairs.py
+          bash scripts/part34_10_strict_java_compile.sh
+
+      - name: Build one usable Alpha APK
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          export VIBECODER_ANDROID_API="29"
+          bash scripts/part34_alpha_build_and_verify.sh "${RUNNER_TEMP}/OmniRoute-release-v3.8.50.zip"
+
+      - name: Upload full Alpha APK + package evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part34-full-alpha-apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/vibecoder-part34-alpha-build-evidence.json
+            android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+            android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
+            android/app/build/outputs/vibecoder-part34-omniroute-asset-staging.json
+          if-no-files-found: error
+          retention-days: 7
