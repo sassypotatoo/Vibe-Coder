@@ -1,0 +1,33 @@
+[package]
+name = "vibecoder-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+vibecoder-command-policy = { path = "../vibecoder-command-policy" }
+vibecoder-process-contract = { path = "../vibecoder-process-contract" }
+vibecoder-agent-contract = { path = "../vibecoder-agent-contract" }
+vibecoder-domain = { path = "../vibecoder-domain" }
+vibecoder-gateway-contract = { path = "../vibecoder-gateway-contract" }
+vibecoder-workspace-contract = { path = "../vibecoder-workspace-contract" }
+vibecoder-routing = { path = "../vibecoder-routing" }
+vibecoder-secrets = { path = "../vibecoder-secrets" }
+vibecoder-persistence-contract = { path = "../vibecoder-persistence-contract" }
+tokio.workspace = true
+
+vibecoder-checkpoint-contract = { path = "../vibecoder-checkpoint-contract" }
+vibecoder-build-contract = { path = "../vibecoder-build-contract" }
+vibecoder-build-repair = { path = "../vibecoder-build-repair" }
+vibecoder-build-loop = { path = "../vibecoder-build-loop" }
+vibecoder-task-orchestration = { path = "../vibecoder-task-orchestration" }
+
+vibecoder-web-toolchain = { path = "../vibecoder-web-toolchain" }
+
+vibecoder-web-build-pipeline = { path = "../vibecoder-web-build-pipeline" }
+
+[dev-dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true

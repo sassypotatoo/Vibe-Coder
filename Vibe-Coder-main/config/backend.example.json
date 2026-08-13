@@ -1,0 +1,50 @@
+{
+  "agent": {
+    "kind": "jcode-harness",
+    "config": {
+      "client_name": "vibecoder/0.1.0",
+      "request_timeout_ms": 30000,
+      "connection": {
+        "mode": "private",
+        "inherit_logins": false,
+        "startup_timeout_ms": 30000,
+        "cleanup_timeout_ms": 30000
+      }
+    }
+  },
+  "model_gateway": {
+    "kind": "omniroute",
+    "config": {
+      "base_url": "http://127.0.0.1:20128/v1",
+      "request_timeout_ms": 30000,
+      "max_response_bytes": 8388608
+    },
+    "credential_ref": {
+      "source": "app_secure_store",
+      "name": "omniroute.api_key"
+    }
+  },
+  "workspace": {
+    "kind": "isolated",
+    "root": "./workspaces"
+  },
+  "routing": {
+    "primary": {
+      "model_id": "provider-a/model-primary",
+      "provider": "provider-a"
+    },
+    "fallbacks": [
+      {
+        "model_id": "provider-b/model-fallback",
+        "provider": "provider-b"
+      }
+    ],
+    "fallback_on": [
+      "rate_limited",
+      "timeout",
+      "provider_unavailable",
+      "model_unavailable"
+    ],
+    "fallback_boundary": "before_response_only"
+  }
+}

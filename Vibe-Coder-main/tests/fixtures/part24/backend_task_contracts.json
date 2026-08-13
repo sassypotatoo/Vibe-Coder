@@ -1,0 +1,367 @@
+{
+  "schema": 1,
+  "profiles": {
+    "valid": {
+      "gateway_id": "omniroute",
+      "upstream_version": "3.8.50",
+      "profile_id": "vibecoder-omniroute-exact-model-v1",
+      "profile_sha256": "aec0f63fb0dec08f24fffde9209504ec447e9428bec1cd64c033649ed275fe3d",
+      "exact_model_only": true,
+      "hidden_model_reroutes_disabled": true
+    },
+    "hidden_reroutes_enabled": {
+      "gateway_id": "omniroute",
+      "upstream_version": "3.8.50",
+      "profile_id": "vibecoder-omniroute-exact-model-v1",
+      "profile_sha256": "aec0f63fb0dec08f24fffde9209504ec447e9428bec1cd64c033649ed275fe3d",
+      "exact_model_only": true,
+      "hidden_model_reroutes_disabled": false
+    }
+  },
+  "cases": [
+    {
+      "name": "exact_primary_success",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" },
+        { "id": "beta/code", "display_name": null, "provider": "beta" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [{ "model_id": "beta/code", "provider": "beta" }],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [[
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ]],
+      "active_models": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "events": ["message_accepted", "text_delta", "turn_completed"],
+      "turn": { "kind": "success", "text": "fixture complete" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "success",
+        "attempt_index": 0,
+        "model_id": "alpha/code",
+        "error_variant": null,
+        "error_code": null,
+        "profile_calls": 1,
+        "gateway_catalog_calls": 1,
+        "agent_catalog_calls": 1,
+        "active_identity_calls": 1,
+        "run_turn_calls": 1,
+        "forwarded_events": 3
+      }
+    },
+    {
+      "name": "missing_primary_uses_only_configured_fallback",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" },
+        { "id": "beta/code", "display_name": null, "provider": "beta" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [{ "model_id": "beta/code", "provider": "beta" }],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [
+        [{ "id": "beta/code", "display_name": null, "provider": "beta" }],
+        [{ "id": "beta/code", "display_name": null, "provider": "beta" }]
+      ],
+      "active_models": [
+        { "id": "beta/code", "display_name": null, "provider": "beta" }
+      ],
+      "events": ["message_accepted", "turn_completed"],
+      "turn": { "kind": "success", "text": "fallback complete" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "success",
+        "attempt_index": 1,
+        "model_id": "beta/code",
+        "error_variant": null,
+        "error_code": null,
+        "profile_calls": 1,
+        "gateway_catalog_calls": 1,
+        "agent_catalog_calls": 2,
+        "active_identity_calls": 1,
+        "run_turn_calls": 1,
+        "forwarded_events": 2
+      }
+    },
+    {
+      "name": "hidden_gateway_reroutes_rejected_before_catalog",
+      "profile": "hidden_reroutes_enabled",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [],
+      "active_models": [],
+      "events": [],
+      "turn": { "kind": "success", "text": "must not run" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "error",
+        "attempt_index": null,
+        "model_id": null,
+        "error_variant": "gateway",
+        "error_code": "deterministic_gateway_runtime_profile_required",
+        "profile_calls": 1,
+        "gateway_catalog_calls": 0,
+        "agent_catalog_calls": 0,
+        "active_identity_calls": 0,
+        "run_turn_calls": 0,
+        "forwarded_events": 0
+      }
+    },
+    {
+      "name": "gateway_jcode_provider_mismatch",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [[
+        { "id": "alpha/code", "display_name": null, "provider": "other" }
+      ]],
+      "active_models": [],
+      "events": [],
+      "turn": { "kind": "success", "text": "must not run" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "error",
+        "attempt_index": null,
+        "model_id": null,
+        "error_variant": "routing",
+        "error_code": "agent_catalog_identity_mismatch",
+        "profile_calls": 1,
+        "gateway_catalog_calls": 1,
+        "agent_catalog_calls": 1,
+        "active_identity_calls": 0,
+        "run_turn_calls": 0,
+        "forwarded_events": 0
+      }
+    },
+    {
+      "name": "active_model_identity_changed",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [[
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ]],
+      "active_models": [
+        { "id": "other/code", "display_name": null, "provider": "alpha" }
+      ],
+      "events": [],
+      "turn": { "kind": "success", "text": "must not run" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "error",
+        "attempt_index": null,
+        "model_id": null,
+        "error_variant": "routing",
+        "error_code": "agent_active_identity_mismatch",
+        "profile_calls": 1,
+        "gateway_catalog_calls": 1,
+        "agent_catalog_calls": 1,
+        "active_identity_calls": 1,
+        "run_turn_calls": 0,
+        "forwarded_events": 0
+      }
+    },
+    {
+      "name": "cancelled_turn_is_terminal",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [[
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ]],
+      "active_models": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "events": ["message_accepted"],
+      "turn": { "kind": "cancelled_result" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "error",
+        "attempt_index": null,
+        "model_id": null,
+        "error_variant": "cancelled",
+        "error_code": null,
+        "profile_calls": 1,
+        "gateway_catalog_calls": 1,
+        "agent_catalog_calls": 1,
+        "active_identity_calls": 1,
+        "run_turn_calls": 1,
+        "forwarded_events": 1
+      }
+    },
+    {
+      "name": "prose_agent_error_never_falls_back",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" },
+        { "id": "beta/code", "display_name": null, "provider": "beta" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [{ "model_id": "beta/code", "provider": "beta" }],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [[
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" },
+        { "id": "beta/code", "display_name": null, "provider": "beta" }
+      ]],
+      "active_models": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "events": ["text_delta"],
+      "turn": { "kind": "agent_error", "code": "fixture_agent_failure" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "error",
+        "attempt_index": null,
+        "model_id": null,
+        "error_variant": "agent",
+        "error_code": "fixture_agent_failure",
+        "profile_calls": 1,
+        "gateway_catalog_calls": 1,
+        "agent_catalog_calls": 1,
+        "active_identity_calls": 1,
+        "run_turn_calls": 1,
+        "forwarded_events": 1
+      }
+    },
+    {
+      "name": "cancelled_error_is_terminal",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [[
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ]],
+      "active_models": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "events": ["message_accepted"],
+      "turn": { "kind": "cancelled_error" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "error",
+        "attempt_index": null,
+        "model_id": null,
+        "error_variant": "cancelled",
+        "error_code": null,
+        "profile_calls": 1,
+        "gateway_catalog_calls": 1,
+        "agent_catalog_calls": 1,
+        "active_identity_calls": 1,
+        "run_turn_calls": 1,
+        "forwarded_events": 1
+      }
+    },
+    {
+      "name": "active_process_blocks_task_before_gateway",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [],
+      "active_models": [],
+      "events": [],
+      "turn": { "kind": "success", "text": "must not run" },
+      "active_processes": 1,
+      "expected": {
+        "kind": "error",
+        "attempt_index": null,
+        "model_id": null,
+        "error_variant": "process",
+        "error_code": "project_process_active",
+        "profile_calls": 0,
+        "gateway_catalog_calls": 0,
+        "agent_catalog_calls": 0,
+        "active_identity_calls": 0,
+        "run_turn_calls": 0,
+        "forwarded_events": 0
+      }
+    },
+    {
+      "name": "duplicate_agent_catalog_id_rejected",
+      "profile": "valid",
+      "gateway_catalog": [
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ],
+      "policy": {
+        "primary": { "model_id": "alpha/code", "provider": "alpha" },
+        "fallbacks": [],
+        "fallback_on": ["model_unavailable"],
+        "fallback_boundary": "before_response_only"
+      },
+      "agent_catalogs": [[
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" },
+        { "id": "alpha/code", "display_name": null, "provider": "alpha" }
+      ]],
+      "active_models": [],
+      "events": [],
+      "turn": { "kind": "success", "text": "must not run" },
+      "active_processes": 0,
+      "expected": {
+        "kind": "error",
+        "attempt_index": null,
+        "model_id": null,
+        "error_variant": "routing",
+        "error_code": "ambiguous_agent_catalog_model_id",
+        "profile_calls": 1,
+        "gateway_catalog_calls": 1,
+        "agent_catalog_calls": 1,
+        "active_identity_calls": 0,
+        "run_turn_calls": 0,
+        "forwarded_events": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+/target/
+/.idea/
+/.vscode/
+*.iml
+.DS_Store
+.env
+.env.*
+!.env.example
+secrets/
+workspaces/
+artifacts/
+.gradle/
+/build/
+/android/app/build/
+/android/app/.cxx/
+/android/signing/vibecoder-diagnostic-debug.jks

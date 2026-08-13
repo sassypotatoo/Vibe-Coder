@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "part": "34.10.6",
+  "claim": "compile_log_audit_and_source_repair_only_not_successful_external_recompile",
+  "current_ci_log_archive": {
+    "name": "logs_85916610910.zip",
+    "sha256": "9c2aa1e15147fc6fb64fcd7801bee1909f2358755f72d5979dc1f30099b2c5a3"
+  },
+  "prior_node_ci_log_archive_used_for_next_failure_evidence": {
+    "name": "logs_85903371815.zip",
+    "sha256": "a5c16765d04386be68c0450138343710f156c0e815997f660662b739f4ff5b76"
+  },
+  "current_ci_observations": {
+    "strict_java_17_compile_passed": true,
+    "jcode_0_73_0_release_build_passed": true,
+    "jcode_android_elf64_aarch64_et_dyn_16k_passed": true,
+    "vibecoder_android_host_compile_passed": false,
+    "node_android_binary_built": false,
+    "full_alpha_apk_built": false
+  },
+  "repaired_first_party_failures": [
+    {
+      "id": "omniroute_process_runtime_trait_not_in_scope",
+      "observed": "Rust E0599 for Arc<LocalProcessRuntime>::cancel",
+      "repair": "import vibecoder_process_contract::ProcessRuntime"
+    },
+    {
+      "id": "node_sanitizer_ran_before_gyp_makefiles_existed",
+      "observed": "sanitize_node_android_host_makefiles: out_dir_missing",
+      "repair": "materialize Node out/Makefile and GYP recipes before host-only sanitization"
+    },
+    {
+      "id": "node_android_target_flag_leaked_into_host_gxx",
+      "observed": "prior real build: /usr/bin/g++ rejected -mbranch-protection=standard in node_js2c.host.mk",
+      "repair": "remove only the proven flag from generated *.host.mk and hash-guard every *.target.mk"
+    },
+    {
+      "id": "omniroute_android_runtime_profile_hash_authority_stale",
+      "observed": "Part 34.3 service regression expected an older profile hash",
+      "repair": "bind state and validators to checked-in profile SHA-256 c9d8cfa91c5d8ec1e4f5862fe4d6e6266ad02db9286daf0b5350268ad0bc3625"
+    }
+  ],
+  "warning_triage": [
+    {
+      "category": "first_party",
+      "message": "value assigned to last_profile is never read",
+      "count_in_duplicated_ci_views": 12,
+      "action": "fixed",
+      "notes": "three compiler warnings repeated across combined/job-step logs; readiness still requires two consecutive full attestations"
+    },
+    {
+      "category": "pinned_upstream_jcode",
+      "message": "Cargo profile package specs and unused/dead-code warnings",
+      "action": "reviewed_no_source_mutation",
+      "notes": "Jcode v0.73.0 release build completed and its Android ELF verification passed"
+    },
+    {
+      "category": "upstream_node_android_configure",
+      "message": "--openssl-no-asm performance warning",
+      "action": "reviewed_no_change",
+      "notes": "performance warning from pinned upstream Android configure path, not a compile correctness failure"
+    },
+    {
+      "category": "ci_tooling",
+      "message": "sdkmanager deprecated in favor of Android CLI",
+      "action": "reviewed_no_source_correctness_change",
+      "notes": "also emitted by android-actions/setup-android itself"
+    },
+    {
+      "category": "ci_tooling",
+      "message": "Gradle basic cache save path missing",
+      "action": "reviewed_no_change",
+      "notes": "post-job cache warning after the compile aborted before cache-producing paths were established"
+    },
+    {
+      "category": "diagnostic_signing",
+      "message": "JKS proprietary format; PKCS12 recommended",
+      "action": "reviewed_preserve_signing_identity",
+      "notes": "format migration is not required for compilation and is intentionally outside this repair scope"
+    }
+  ],
+  "external_recompile_required_for_zero_error_claim": true
+}
