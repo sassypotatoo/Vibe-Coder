@@ -21,6 +21,7 @@ core_manifest=read(Path('crates/vibecoder-core/Cargo.toml'))
 cargo_lock=read(Path('Cargo.lock'))
 node_provision=read(Path('scripts/provision_node_android.sh'))
 node_split=read(Path('scripts/verify_node_android_toolchain_split.py'))
+node_sanitize=read(Path('scripts/sanitize_node_android_host_makefiles.py'))
 compile_repairs=read(Path('scripts/test_part34_10_compile_repairs.py'))
 alpha_build=read(Path('scripts/part34_alpha_build_and_verify.sh'))
 alpha_evidence=read(Path('scripts/write_alpha_build_evidence.py'))
@@ -171,10 +172,14 @@ for key,value in expected.items():
     if project.get(key)!=value: raise SystemExit(f"Part 34.10 PROJECT_STATE mismatch: {key}")
 for key in ('compile_log_repair_applied','vibecoder_core_tokio_direct_dependency_fixed',
             'node_android_host_target_toolchain_split_enforced','node_android_split_regression_guard_added',
-            'first_compile_failure_repaired_not_recompiled'):
+            'first_compile_failure_repaired_not_recompiled','second_compile_failure_logs_analyzed',
+            'runtime_service_arg_undefined_validator_fixed','gateway_unused_import_warning_fixed',
+            'node_android_host_arm64_flag_leak_repaired','node_android_host_makefile_sanitizer_added',
+            'node_android_host_makefile_sanitizer_evidence_bound','ci_all_crates_path_triggered',
+            'second_compile_failures_repaired_not_recompiled'):
     if project.get(key) is not True:
         raise SystemExit(f"Part 34.10 PROJECT_STATE compile repair flag missing: {key}")
-if project.get('step') != '34.10.4-first-compile-log-repair':
+if project.get('step') != '34.10.5-second-compile-loop-repair':
     raise SystemExit('Part 34.10 PROJECT_STATE compile repair step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
@@ -201,10 +206,14 @@ for key,value in expected_state.items():
     if state.get(key)!=value: raise SystemExit(f"Part 34.10 PART34_STATE mismatch: {key}")
 for key in ('compile_log_repair_applied','vibecoder_core_tokio_direct_dependency_fixed',
             'node_android_host_target_toolchain_split_enforced','node_android_split_regression_guard_added',
-            'first_compile_failure_repaired_not_recompiled'):
+            'first_compile_failure_repaired_not_recompiled','second_compile_failure_logs_analyzed',
+            'runtime_service_arg_undefined_validator_fixed','gateway_unused_import_warning_fixed',
+            'node_android_host_arm64_flag_leak_repaired','node_android_host_makefile_sanitizer_added',
+            'node_android_host_makefile_sanitizer_evidence_bound','ci_all_crates_path_triggered',
+            'second_compile_failures_repaired_not_recompiled'):
     if state.get(key) is not True:
         raise SystemExit(f"Part 34.10 PART34_STATE compile repair flag missing: {key}")
-if state.get('step') != '34.10.4-first-compile-log-repair':
+if state.get('step') != '34.10.5-second-compile-loop-repair':
     raise SystemExit('Part 34.10 PART34_STATE compile repair step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
@@ -224,16 +233,28 @@ if ' "tokio",' not in cargo_lock[core_lock_start:core_lock_end]:
     raise SystemExit('Part 34.10 vibecoder-core Cargo.lock dependency list missing tokio')
 if 'let (project, session_id, mut conversation, checkpoint) = {' in core:
     raise SystemExit('Part 34.10 known unused_mut warning regressed')
+if 'is_forbidden_control' in read(Path('crates/vibecoder-process-local/src/lib.rs')):
+    raise SystemExit('Part 34.10 undefined runtime-service arg validator regressed')
+need(read(Path('crates/vibecoder-process-local/src/lib.rs')), 'value.chars().any(is_forbidden_display_char)', 'runtime service arg validator')
+if '    GatewayChatMessage, GatewayChatRequest' in read(Path('crates/vibecoder-gateway-omniroute/src/chat.rs')):
+    raise SystemExit('Part 34.10 production unused GatewayChatMessage import regressed')
 for token in ('HOST_CC=', 'HOST_CXX=', 'CC.host=$HOST_CC', 'CXX.host=$HOST_CXX',
               'CC.target=$NDK_CC', 'CXX.target=$NDK_CXX',
-              'verify_node_android_toolchain_split.py', 'node_android_toolchain_split_log_invalid'):
+              'verify_node_android_toolchain_split.py', 'sanitize_node_android_host_makefiles.py',
+              'node_android_host_makefile_sanitize_failed', 'node_android_toolchain_split_log_invalid'):
     need(node_provision, token, 'Node Android host/target compiler split')
 for token in ('host_compiler_must_not_be_from_android_ndk',
               'android_target_compiler_used_for_obj_host',
+              'android_arm_branch_protection_flag_used_for_obj_host',
               'expected_android_compiler_not_observed_for_obj_target',
               '--require-observed'):
     need(node_split, token, 'Node Android toolchain-split verifier')
 need(compile_repairs, 'old_android_compiler_for_obj_host_not_rejected', 'compile-log repair regression')
+need(compile_repairs, 'undefined_is_forbidden_control_regression_present', 'second compile Rust regression')
+need(compile_repairs, 'android_arm_flag_for_obj_host_not_rejected', 'second compile Node flag regression')
+for token in ('*.host.mk','-mbranch-protection=','host_target_flag_residual'):
+    need(node_sanitize, token, 'Node Android host makefile sanitizer')
+need(workflow, '- "crates/**"', 'all-crates Android CI trigger')
 need(workflow, 'python3 scripts/test_part34_10_compile_repairs.py', 'compile-log repair CI regression')
 
-print('Part 34.10.4 compile-log repair source validation PASSED')
+print('Part 34.10.5 second compile-loop repair source validation PASSED')

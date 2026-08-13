@@ -150,3 +150,12 @@ acceptance remains separable from provider account setup.
 ## Part 34.10.4 compile-log repair
 
 The first GitHub Actions compile exposed two concrete issues. `vibecoder-core` now declares its direct Tokio time dependency and the local Cargo.lock package dependency list is aligned. Node Android cross-builds now explicitly split host GCC/G++ tools from NDK AArch64 target tools at make time; generated Makefile and build-log checks fail closed if an `obj.host` recipe uses the Android target compiler. This repairs the observed failures without patching or weakening the pinned Node source archive. A successful Node Android binary and full Alpha APK remain evidence gates, not source claims.
+
+### Part 34.10.5 — second compile-log loop repair
+- GitHub run 85903371815 confirmed the previous Tokio and Node host/target compiler fixes progressed the build.
+- Fixed `vibecoder-process-local` runtime-service argv validation to use the existing `is_forbidden_display_char` policy instead of an undefined helper.
+- Removed the production-only unused `GatewayChatMessage` import while preserving the test import.
+- Node Android generated `.host.mk` files are sanitized only for the proven ARM64-only `-mbranch-protection=*` leakage; target makefiles remain untouched.
+- Node log verification rejects ARM64 branch-protection flags on `obj.host`, and cross-build evidence is bound to the sanitizer source.
+- CI now triggers on any `crates/**` change so process/runtime crate fixes cannot silently skip Android compilation.
+- Fresh GitHub recompile is still required; no successful Node/Full Alpha binary is claimed by this source checkpoint.

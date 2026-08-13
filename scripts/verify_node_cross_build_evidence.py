@@ -73,8 +73,12 @@ def main() -> int:
     source_contract = evidence.get('source_contract') or {}
     if source_contract.get('node_provisioner_sha256') != sha256_file(ROOT / 'scripts/provision_node_android.sh'):
         fail('node_provisioner_source_contract_mismatch')
+    if source_contract.get('android_elf_verifier_sha256') != sha256_file(ROOT / 'scripts/verify_android_elf.py'):
+        fail('android_elf_verifier_source_contract_mismatch')
     if source_contract.get('host_target_toolchain_split_verifier_sha256') != sha256_file(ROOT / 'scripts/verify_node_android_toolchain_split.py'):
         fail('host_target_toolchain_split_verifier_source_contract_mismatch')
+    if source_contract.get('host_makefile_sanitizer_sha256') != sha256_file(ROOT / 'scripts/sanitize_node_android_host_makefiles.py'):
+        fail('host_makefile_sanitizer_source_contract_mismatch')
     print(json.dumps({'node_cross_build_evidence': 'VERIFIED', 'node_sha256': info['output_sha256']}, separators=(',', ':')))
     return 0
 

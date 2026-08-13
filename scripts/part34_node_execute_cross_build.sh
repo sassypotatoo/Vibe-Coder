@@ -40,6 +40,9 @@ else
   elif grep -q 'node_android_configure_output_invalid:' "$EXECUTION_LOG"; then
     CLASSIFICATION="configure_evidence_invalid"
     DETAIL="node_android_configure_output_invalid"
+  elif grep -q 'node_android_host_makefile_sanitize_failed' "$EXECUTION_LOG"; then
+    CLASSIFICATION="host_target_flag_sanitize_failed"
+    DETAIL="node_android_host_makefile_sanitize_failed"
   elif grep -Eq 'node_android_toolchain_split_(preflight_failed|log_invalid)' "$EXECUTION_LOG"; then
     CLASSIFICATION="host_target_toolchain_split_invalid"
     DETAIL="node_android_host_target_toolchain_split_invalid"

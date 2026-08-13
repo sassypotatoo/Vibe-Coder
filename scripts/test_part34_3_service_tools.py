@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PROFILE_SHA256 = "50a905468713717b619fd083a9dbeabaf1ca0c9c996e05f0ab79b50fc10bb729"
+PROFILE_SHA256 = "c9d8cfa91c5d8ec1e4f5862fe4d6e6266ad02db9286daf0b5350268ad0bc3625"
 
 
 def read(path: str) -> str:

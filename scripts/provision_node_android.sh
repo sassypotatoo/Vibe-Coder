@@ -94,6 +94,11 @@ python3 "$ROOT/scripts/verify_node_android_configure_output.py" "$WORK/config.gy
 python3 "$ROOT/scripts/verify_node_android_toolchain_split.py" preflight \
   "$WORK/out/Makefile" "$NDK_ROOT" "$HOST_CC" "$HOST_CXX" "$NDK_CC" "$NDK_CXX" \
   || fail "node_android_toolchain_split_preflight_failed"
+# Upstream Android configure also leaks Android/ARM64-only compile flags into generated .host.mk
+# files. Host generators execute on the Linux/macOS build machine, so strip only the two exact
+# target-only inputs observed in the reviewed Node 24.19 Android graph. Never rewrite .target.mk.
+python3 "$ROOT/scripts/sanitize_node_android_host_makefiles.py" "$WORK/out/Release" "$NDK_ROOT" \
+  || fail "node_android_host_makefile_sanitize_failed"
 
 printf 'vibecoder_node_host_cc=%s\n' "$HOST_CC" > "$BUILD_LOG"
 printf 'vibecoder_node_host_cxx=%s\n' "$HOST_CXX" >> "$BUILD_LOG"

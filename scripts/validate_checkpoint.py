@@ -4053,6 +4053,7 @@ def check_part34_2_node_staging_lane() -> None:
     cross_verify = read("scripts/verify_node_cross_build_evidence.py")
     configure_verify = read("scripts/verify_node_android_configure_output.py")
     toolchain_split_verify = read("scripts/verify_node_android_toolchain_split.py")
+    host_makefile_sanitize = read("scripts/sanitize_node_android_host_makefiles.py")
     compile_repair_test = read("scripts/test_part34_10_compile_repairs.py")
     attempt_wrapper = read("scripts/part34_node_execute_cross_build.sh")
     attempt_writer = read("scripts/write_node_cross_build_attempt.py")
@@ -4100,7 +4101,9 @@ def check_part34_2_node_staging_lane() -> None:
         '"CC.target=$NDK_CC"',
         '"CXX.target=$NDK_CXX"',
         'verify_node_android_toolchain_split.py',
+        'sanitize_node_android_host_makefiles.py',
         'node_android_toolchain_split_preflight_failed',
+        'node_android_host_makefile_sanitize_failed',
         'node_android_toolchain_split_log_invalid',
         'node_android_configure_failed:status=',
         'node_android_make_failed:status=',
@@ -4127,6 +4130,7 @@ def check_part34_2_node_staging_lane() -> None:
         "'configure_sha256': sha256_file(configure_log)",
         "'make_sha256': sha256_file(build_log)",
         'verify_android_elf.py',
+        'host_makefile_sanitizer_sha256',
         'os.replace(temp, output)',
     ):
         if token not in cross_writer:
@@ -4162,6 +4166,7 @@ def check_part34_2_node_staging_lane() -> None:
         'host_compiler_must_not_be_from_android_ndk',
         'target_compiler_must_be_from_android_ndk',
         'android_target_compiler_used_for_obj_host',
+        'android_arm_branch_protection_flag_used_for_obj_host',
         'expected_host_compiler_not_observed_for_obj_host',
         'expected_android_compiler_not_observed_for_obj_target',
         'no_obj_host_compile_observed',
@@ -4169,11 +4174,18 @@ def check_part34_2_node_staging_lane() -> None:
     ):
         if token not in toolchain_split_verify:
             fail(f"Part 34.2.3 Node host/target toolchain verifier missing: {token}")
-    for token in ('vibecoder_core_tokio_direct_dependency_missing', 'old_android_compiler_for_obj_host_not_rejected'):
+    for token in ('vibecoder_core_tokio_direct_dependency_missing', 'old_android_compiler_for_obj_host_not_rejected',
+                  'undefined_is_forbidden_control_regression_present', 'android_arm_flag_for_obj_host_not_rejected',
+                  'host_makefile_recipe_tab_was_damaged', 'target_makefile_was_modified_by_host_sanitizer'):
         if token not in compile_repair_test:
             fail(f"Part 34.10 compile-log repair regression missing: {token}")
 
-    for token in ('host_target_toolchain_split_invalid', 'node_android_host_target_toolchain_split_invalid'):
+    for token in ('*.host.mk', '-mbranch-protection=', 'host_target_flag_residual'):
+        if token not in host_makefile_sanitize:
+            fail(f"Part 34.10 Node host makefile sanitizer missing: {token}")
+
+    for token in ('host_target_toolchain_split_invalid', 'node_android_host_target_toolchain_split_invalid',
+                  'host_target_flag_sanitize_failed', 'node_android_host_makefile_sanitize_failed'):
         if token not in attempt_wrapper:
             fail(f"Part 34.2.3 Node attempt classification missing: {token}")
 
@@ -6338,7 +6350,7 @@ def check_part34_3_omniroute_source_admission() -> None:
 
     if omni.get("current_runner_build_preflight_passed") is not False:
         fail("Part 34.3 current runner must not claim Node-24 bundle build preflight")
-    if omni.get("android_runtime_profile_sha256") != "50a905468713717b619fd083a9dbeabaf1ca0c9c996e05f0ab79b50fc10bb729":
+    if omni.get("android_runtime_profile_sha256") != "c9d8cfa91c5d8ec1e4f5862fe4d6e6266ad02db9286daf0b5350268ad0bc3625":
         fail("Part 34.3 Android runtime profile hash drifted")
 
     for path, tokens in {

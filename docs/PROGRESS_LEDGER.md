@@ -1039,3 +1039,12 @@ Status: **SOURCE REPAIR COMPLETE; SECOND GITHUB COMPILE PENDING**
 - [x] Added a regression proving the observed old host-toolchain failure is rejected and a correct host/target split is accepted.
 - [ ] Second real GitHub Actions compile to expose the next genuine compiler/linker result.
 - [ ] Full Alpha APK build/package proof and physical-device acceptance.
+
+### Part 34.10.5 — second compile-log loop repair
+- GitHub run 85903371815 confirmed the previous Tokio and Node host/target compiler fixes progressed the build.
+- Fixed `vibecoder-process-local` runtime-service argv validation to use the existing `is_forbidden_display_char` policy instead of an undefined helper.
+- Removed the production-only unused `GatewayChatMessage` import while preserving the test import.
+- Node Android generated `.host.mk` files are sanitized only for the proven ARM64-only `-mbranch-protection=*` leakage; target makefiles remain untouched.
+- Node log verification rejects ARM64 branch-protection flags on `obj.host`, and cross-build evidence is bound to the sanitizer source.
+- CI now triggers on any `crates/**` change so process/runtime crate fixes cannot silently skip Android compilation.
+- Fresh GitHub recompile is still required; no successful Node/Full Alpha binary is claimed by this source checkpoint.

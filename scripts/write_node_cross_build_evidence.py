@@ -121,6 +121,7 @@ def main() -> int:
             'node_provisioner_sha256': sha256_file(ROOT / 'scripts/provision_node_android.sh'),
             'android_elf_verifier_sha256': sha256_file(ROOT / 'scripts/verify_android_elf.py'),
             'host_target_toolchain_split_verifier_sha256': sha256_file(ROOT / 'scripts/verify_node_android_toolchain_split.py'),
+            'host_makefile_sanitizer_sha256': sha256_file(ROOT / 'scripts/sanitize_node_android_host_makefiles.py'),
         },
     }
     output.parent.mkdir(parents=True, exist_ok=True)

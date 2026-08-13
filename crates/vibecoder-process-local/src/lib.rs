@@ -1457,7 +1457,7 @@ fn validate_runtime_service_id(service_id: &str) -> Result<&str> {
 fn validate_runtime_service_arg(value: &str) -> Result<()> {
     if value.len() > MAX_RUNTIME_SERVICE_ARG_BYTES
         || value.as_bytes().contains(&0)
-        || value.chars().any(is_forbidden_control)
+        || value.chars().any(is_forbidden_display_char)
     {
         return Err(process_error("process_runtime_service_arg_invalid"));
     }
@@ -1506,6 +1506,7 @@ mod tests {
         assert!(validate_runtime_service_id("UPPER").is_err());
         assert!(validate_runtime_service_arg("--version").is_ok());
         assert!(validate_runtime_service_arg("bad\narg").is_err());
+        assert!(validate_runtime_service_arg("bad\u{202e}arg").is_err());
         assert!(validate_runtime_service_env("PORT", "20128").is_ok());
         assert!(validate_runtime_service_env("NODE_ENV", "production").is_ok());
         assert!(validate_runtime_service_env("PATH", "/tmp").is_err());

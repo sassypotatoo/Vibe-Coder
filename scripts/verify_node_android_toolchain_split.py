@@ -90,6 +90,10 @@ def logcheck(args: argparse.Namespace) -> None:
                 fail('android_target_compiler_used_for_obj_host')
             if not (command_has(tokens, host_cc) or command_has(tokens, host_cxx)):
                 fail('expected_host_compiler_not_observed_for_obj_host')
+            if any(token.startswith('-mbranch-protection=') for token in tokens):
+                fail('android_arm_branch_protection_flag_used_for_obj_host')
+            if any(token.startswith('--target=') and 'android' in token for token in tokens):
+                fail('android_target_flag_used_for_obj_host')
         elif '/obj.target/' in raw:
             target_seen += 1
             if not (command_has(tokens, target_cc) or command_has(tokens, target_cxx)):

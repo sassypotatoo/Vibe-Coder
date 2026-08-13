@@ -6,6 +6,7 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "crates/**"
       - "android/**"
       - "crates/vibecoder-android-host/**"
       - "crates/vibecoder-core/**"
@@ -24,6 +25,7 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "crates/**"
       - "android/**"
       - "crates/vibecoder-android-host/**"
       - "crates/vibecoder-core/**"
@@ -48,6 +50,7 @@ on:
       - "scripts/verify_node_cross_build_evidence.py"
       - "scripts/verify_node_android_configure_output.py"
       - "scripts/verify_node_android_toolchain_split.py"
+      - "scripts/sanitize_node_android_host_makefiles.py"
       - "scripts/test_part34_10_compile_repairs.py"
       - "scripts/verify_jcode_android_source.sh"
       - "scripts/verify_android_elf.py"
