@@ -17,6 +17,11 @@ strings=read(Path('android/app/src/main/res/values/strings.xml'))
 manifest=read(Path('android/app/src/main/AndroidManifest.xml'))
 workflow=read(Path('.github/workflows/android-diagnostic-apk.yml'))
 strict_java=read(Path('scripts/part34_10_strict_java_compile.sh'))
+core_manifest=read(Path('crates/vibecoder-core/Cargo.toml'))
+cargo_lock=read(Path('Cargo.lock'))
+node_provision=read(Path('scripts/provision_node_android.sh'))
+node_split=read(Path('scripts/verify_node_android_toolchain_split.py'))
+compile_repairs=read(Path('scripts/test_part34_10_compile_repairs.py'))
 alpha_build=read(Path('scripts/part34_alpha_build_and_verify.sh'))
 alpha_evidence=read(Path('scripts/write_alpha_build_evidence.py'))
 omni_fetch=read(Path('scripts/fetch_omniroute_reviewed_archive.sh'))
@@ -164,6 +169,13 @@ expected={
  'physical_alpha_acceptance_mode_defined':True}
 for key,value in expected.items():
     if project.get(key)!=value: raise SystemExit(f"Part 34.10 PROJECT_STATE mismatch: {key}")
+for key in ('compile_log_repair_applied','vibecoder_core_tokio_direct_dependency_fixed',
+            'node_android_host_target_toolchain_split_enforced','node_android_split_regression_guard_added',
+            'first_compile_failure_repaired_not_recompiled'):
+    if project.get(key) is not True:
+        raise SystemExit(f"Part 34.10 PROJECT_STATE compile repair flag missing: {key}")
+if project.get('step') != '34.10.4-first-compile-log-repair':
+    raise SystemExit('Part 34.10 PROJECT_STATE compile repair step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -187,6 +199,13 @@ expected_state={
  'physical_alpha_acceptance_mode_defined':True}
 for key,value in expected_state.items():
     if state.get(key)!=value: raise SystemExit(f"Part 34.10 PART34_STATE mismatch: {key}")
+for key in ('compile_log_repair_applied','vibecoder_core_tokio_direct_dependency_fixed',
+            'node_android_host_target_toolchain_split_enforced','node_android_split_regression_guard_added',
+            'first_compile_failure_repaired_not_recompiled'):
+    if state.get(key) is not True:
+        raise SystemExit(f"Part 34.10 PART34_STATE compile repair flag missing: {key}")
+if state.get('step') != '34.10.4-first-compile-log-repair':
+    raise SystemExit('Part 34.10 PART34_STATE compile repair step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -198,4 +217,23 @@ for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('reviewed_omniroute_git_commit') != 'ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f':
         raise SystemExit(f'Part 34.10 {label} reviewed_omniroute_git_commit mismatch')
 
-print('Part 34.10.3 pre-compile audit + full Alpha build-lane source validation PASSED')
+need(core_manifest, 'tokio.workspace = true', 'vibecoder-core Tokio direct dependency')
+core_lock_start=cargo_lock.index('name = "vibecoder-core"')
+core_lock_end=cargo_lock.index('\n[[package]]', core_lock_start)
+if ' "tokio",' not in cargo_lock[core_lock_start:core_lock_end]:
+    raise SystemExit('Part 34.10 vibecoder-core Cargo.lock dependency list missing tokio')
+if 'let (project, session_id, mut conversation, checkpoint) = {' in core:
+    raise SystemExit('Part 34.10 known unused_mut warning regressed')
+for token in ('HOST_CC=', 'HOST_CXX=', 'CC.host=$HOST_CC', 'CXX.host=$HOST_CXX',
+              'CC.target=$NDK_CC', 'CXX.target=$NDK_CXX',
+              'verify_node_android_toolchain_split.py', 'node_android_toolchain_split_log_invalid'):
+    need(node_provision, token, 'Node Android host/target compiler split')
+for token in ('host_compiler_must_not_be_from_android_ndk',
+              'android_target_compiler_used_for_obj_host',
+              'expected_android_compiler_not_observed_for_obj_target',
+              '--require-observed'):
+    need(node_split, token, 'Node Android toolchain-split verifier')
+need(compile_repairs, 'old_android_compiler_for_obj_host_not_rejected', 'compile-log repair regression')
+need(workflow, 'python3 scripts/test_part34_10_compile_repairs.py', 'compile-log repair CI regression')
+
+print('Part 34.10.4 compile-log repair source validation PASSED')

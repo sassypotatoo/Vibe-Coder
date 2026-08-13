@@ -1638,7 +1638,7 @@ where
         }
 
         let store = self.conversation_store()?;
-        let (project, session_id, mut conversation, checkpoint) = {
+        let (project, session_id, conversation, checkpoint) = {
             let _lifecycle = self.project_lifecycle_gate.try_acquire(project_id)?;
             let project = self.workspace.open_project(project_id).await?;
             self.workspace.verify_project(&project).await?;

@@ -1023,3 +1023,19 @@ Status: **SOURCE WIRED; REAL ANDROID/RUST/OMNIROUTE ROUND-TRIP PROOF PENDING**
 - [ ] Fresh Cargo/Rust + Gradle/NDK compile and physical-device normal-chat round trip.
 
 - Part 34.10.2 final hardening: fresh OmniRoute catalog selection now rejects model IDs that the durable conversation contract cannot accept, and app-open catalog readiness gets a bounded 4x/250ms startup-only warm-up retry (no inference retry/fallback).
+
+
+#### Part 34.10.4 — first GitHub compile-log repair
+
+Status: **SOURCE REPAIR COMPLETE; SECOND GITHUB COMPILE PENDING**
+
+- [x] Analyzed the first real GitHub Actions failure logs rather than changing unrelated runtime code.
+- [x] Fixed `vibecoder-core` using `tokio::time::timeout` without declaring Tokio as a direct dependency; aligned the local package dependency list in `Cargo.lock`.
+- [x] Removed the compiler-reported unnecessary `mut` binding in the first agent-action turn.
+- [x] Confirmed the Node Android failure was an `obj.host` V8 object being compiled by `aarch64-linux-android29-clang++`.
+- [x] Kept the exact reviewed Node 24.19.0 source archive unmodified and split host GCC/G++ from Android NDK target Clang explicitly at make time.
+- [x] Added generated-Makefile and build-log fail-closed verification so any future Android compiler use for `obj.host` is rejected distinctly.
+- [x] Bound Node cross-build evidence to the host/target split verifier source hash.
+- [x] Added a regression proving the observed old host-toolchain failure is rejected and a correct host/target split is accepted.
+- [ ] Second real GitHub Actions compile to expose the next genuine compiler/linker result.
+- [ ] Full Alpha APK build/package proof and physical-device acceptance.

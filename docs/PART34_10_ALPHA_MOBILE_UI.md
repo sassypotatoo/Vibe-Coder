@@ -145,3 +145,8 @@ requires Jcode device readiness, exact Node 24.19.0 device execution, verified O
 installation, loopback service readiness/attestation and explicit service stop in the **same installed
 package**. It deliberately does not require a paid/provider-specific model request, so package/runtime
 acceptance remains separable from provider account setup.
+
+
+## Part 34.10.4 compile-log repair
+
+The first GitHub Actions compile exposed two concrete issues. `vibecoder-core` now declares its direct Tokio time dependency and the local Cargo.lock package dependency list is aligned. Node Android cross-builds now explicitly split host GCC/G++ tools from NDK AArch64 target tools at make time; generated Makefile and build-log checks fail closed if an `obj.host` recipe uses the Android target compiler. This repairs the observed failures without patching or weakening the pinned Node source archive. A successful Node Android binary and full Alpha APK remain evidence gates, not source claims.

@@ -4052,6 +4052,8 @@ def check_part34_2_node_staging_lane() -> None:
     cross_writer = read("scripts/write_node_cross_build_evidence.py")
     cross_verify = read("scripts/verify_node_cross_build_evidence.py")
     configure_verify = read("scripts/verify_node_android_configure_output.py")
+    toolchain_split_verify = read("scripts/verify_node_android_toolchain_split.py")
+    compile_repair_test = read("scripts/test_part34_10_compile_repairs.py")
     attempt_wrapper = read("scripts/part34_node_execute_cross_build.sh")
     attempt_writer = read("scripts/write_node_cross_build_attempt.py")
     ndk_bootstrap = read("scripts/bootstrap_pinned_android_ndk_r28c.sh")
@@ -4091,6 +4093,15 @@ def check_part34_2_node_staging_lane() -> None:
         'verify_node_android_configure_output.py',
         'node_android_configure_output_invalid:',
         'make -j"$JOBS"',
+        'HOST_CC=',
+        'HOST_CXX=',
+        '"CC.host=$HOST_CC"',
+        '"CXX.host=$HOST_CXX"',
+        '"CC.target=$NDK_CC"',
+        '"CXX.target=$NDK_CXX"',
+        'verify_node_android_toolchain_split.py',
+        'node_android_toolchain_split_preflight_failed',
+        'node_android_toolchain_split_log_invalid',
         'node_android_configure_failed:status=',
         'node_android_make_failed:status=',
         'python3 "$ROOT/scripts/verify_android_elf.py" "$SOURCE"',
@@ -4146,6 +4157,25 @@ def check_part34_2_node_staging_lane() -> None:
     ):
         if token not in configure_verify:
             fail(f"Part 34.2.3 Node configure-output verifier contract missing: {token}")
+
+    for token in (
+        'host_compiler_must_not_be_from_android_ndk',
+        'target_compiler_must_be_from_android_ndk',
+        'android_target_compiler_used_for_obj_host',
+        'expected_host_compiler_not_observed_for_obj_host',
+        'expected_android_compiler_not_observed_for_obj_target',
+        'no_obj_host_compile_observed',
+        'no_obj_target_compile_observed',
+    ):
+        if token not in toolchain_split_verify:
+            fail(f"Part 34.2.3 Node host/target toolchain verifier missing: {token}")
+    for token in ('vibecoder_core_tokio_direct_dependency_missing', 'old_android_compiler_for_obj_host_not_rejected'):
+        if token not in compile_repair_test:
+            fail(f"Part 34.10 compile-log repair regression missing: {token}")
+
+    for token in ('host_target_toolchain_split_invalid', 'node_android_host_target_toolchain_split_invalid'):
+        if token not in attempt_wrapper:
+            fail(f"Part 34.2.3 Node attempt classification missing: {token}")
 
     # APK verifier gains a Node mode without weakening the established minimal/Jcode requirements.
     for token in (

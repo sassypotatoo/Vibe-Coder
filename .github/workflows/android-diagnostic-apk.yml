@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "android/**"
       - "crates/vibecoder-android-host/**"
       - "crates/vibecoder-core/**"
@@ -20,6 +22,8 @@ on:
       - ".github/workflows/android-diagnostic-apk.yml"
   pull_request:
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "android/**"
       - "crates/vibecoder-android-host/**"
       - "crates/vibecoder-core/**"
@@ -43,6 +47,8 @@ on:
       - "scripts/write_node_cross_build_evidence.py"
       - "scripts/verify_node_cross_build_evidence.py"
       - "scripts/verify_node_android_configure_output.py"
+      - "scripts/verify_node_android_toolchain_split.py"
+      - "scripts/test_part34_10_compile_repairs.py"
       - "scripts/verify_jcode_android_source.sh"
       - "scripts/verify_android_elf.py"
       - "scripts/verify_android_diagnostic_apk.sh"
@@ -156,6 +162,7 @@ jobs:
           python3 scripts/validate_part34_10.py
           python3 scripts/test_part34_10_ui_tools.py
           python3 scripts/test_part34_10_alpha_package_tools.py
+          python3 scripts/test_part34_10_compile_repairs.py
 
       - name: Strict Java 17 compile gate
         shell: bash

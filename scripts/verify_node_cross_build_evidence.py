@@ -70,6 +70,11 @@ def main() -> int:
     toolchain = evidence.get('toolchain') or {}
     if toolchain.get('android_ndk_revision') != EXPECTED_NDK_REVISION:
         fail('android_ndk_revision_mismatch')
+    source_contract = evidence.get('source_contract') or {}
+    if source_contract.get('node_provisioner_sha256') != sha256_file(ROOT / 'scripts/provision_node_android.sh'):
+        fail('node_provisioner_source_contract_mismatch')
+    if source_contract.get('host_target_toolchain_split_verifier_sha256') != sha256_file(ROOT / 'scripts/verify_node_android_toolchain_split.py'):
+        fail('host_target_toolchain_split_verifier_source_contract_mismatch')
     print(json.dumps({'node_cross_build_evidence': 'VERIFIED', 'node_sha256': info['output_sha256']}, separators=(',', ':')))
     return 0
 

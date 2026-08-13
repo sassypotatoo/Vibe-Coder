@@ -120,6 +120,7 @@ def main() -> int:
         'source_contract': {
             'node_provisioner_sha256': sha256_file(ROOT / 'scripts/provision_node_android.sh'),
             'android_elf_verifier_sha256': sha256_file(ROOT / 'scripts/verify_android_elf.py'),
+            'host_target_toolchain_split_verifier_sha256': sha256_file(ROOT / 'scripts/verify_node_android_toolchain_split.py'),
         },
     }
     output.parent.mkdir(parents=True, exist_ok=True)

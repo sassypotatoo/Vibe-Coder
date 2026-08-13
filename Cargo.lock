@@ -1711,6 +1711,7 @@ dependencies = [
  "async-trait",
  "serde",
  "serde_json",
+ "tokio",
  "vibecoder-agent-contract",
  "vibecoder-build-contract",
  "vibecoder-build-loop",

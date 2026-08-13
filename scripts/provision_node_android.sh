@@ -39,8 +39,23 @@ esac
 NDK_TOOLCHAIN_BIN="$NDK_ROOT/toolchains/llvm/prebuilt/$NDK_HOST_TAG/bin"
 NDK_CC="$NDK_TOOLCHAIN_BIN/aarch64-linux-android${API}-clang"
 NDK_CXX="$NDK_TOOLCHAIN_BIN/aarch64-linux-android${API}-clang++"
+NDK_AR="$NDK_TOOLCHAIN_BIN/llvm-ar"
 [[ -x "$NDK_CC" ]] || fail "android_ndk_c_compiler_missing:$NDK_CC"
 [[ -x "$NDK_CXX" ]] || fail "android_ndk_cxx_compiler_missing:$NDK_CXX"
+[[ -x "$NDK_AR" ]] || fail "android_ndk_ar_missing:$NDK_AR"
+
+# Node's upstream Android configure helper intentionally exports CC/CXX as the Android target
+# compiler before invoking ./configure. GYP can consequently generate obj.host recipes that inherit
+# that Android compiler too. Host generators must execute on the CI host, so bind the two toolchains
+# explicitly at make time instead of patching the reviewed Node source tree.
+HOST_CC="${VIBECODER_NODE_HOST_CC:-$(command -v gcc || true)}"
+HOST_CXX="${VIBECODER_NODE_HOST_CXX:-$(command -v g++ || true)}"
+HOST_AR="${VIBECODER_NODE_HOST_AR:-$(command -v ar || true)}"
+[[ -n "$HOST_CC" && -x "$HOST_CC" ]] || fail "node_host_c_compiler_missing"
+[[ -n "$HOST_CXX" && -x "$HOST_CXX" ]] || fail "node_host_cxx_compiler_missing"
+[[ -n "$HOST_AR" && -x "$HOST_AR" ]] || fail "node_host_ar_missing"
+case "$HOST_CC" in "$NDK_ROOT"/*) fail "node_host_c_compiler_must_not_be_ndk:$HOST_CC" ;; esac
+case "$HOST_CXX" in "$NDK_ROOT"/*) fail "node_host_cxx_compiler_must_not_be_ndk:$HOST_CXX" ;; esac
 python3 - <<'PY' || fail "python_version_unsupported_by_node_android_configure"
 import sys
 if sys.version_info[:2] not in {(3, 9), (3, 10), (3, 11), (3, 12), (3, 13), (3, 14)}:
@@ -76,12 +91,32 @@ fi
 # making that inner command's status the wrapper status. Never accept wrapper exit 0 by itself.
 python3 "$ROOT/scripts/verify_node_android_configure_output.py" "$WORK/config.gypi" "$WORK/Makefile" \
   || fail "node_android_configure_output_invalid:log=${CONFIGURE_LOG}"
+python3 "$ROOT/scripts/verify_node_android_toolchain_split.py" preflight \
+  "$WORK/out/Makefile" "$NDK_ROOT" "$HOST_CC" "$HOST_CXX" "$NDK_CC" "$NDK_CXX" \
+  || fail "node_android_toolchain_split_preflight_failed"
 
+printf 'vibecoder_node_host_cc=%s\n' "$HOST_CC" > "$BUILD_LOG"
+printf 'vibecoder_node_host_cxx=%s\n' "$HOST_CXX" >> "$BUILD_LOG"
+printf 'vibecoder_node_target_cc=%s\n' "$NDK_CC" >> "$BUILD_LOG"
+printf 'vibecoder_node_target_cxx=%s\n' "$NDK_CXX" >> "$BUILD_LOG"
 set +e
-make -j"$JOBS" 2>&1 | tee "$BUILD_LOG"
+make -j"$JOBS" \
+  "CC.host=$HOST_CC" "CXX.host=$HOST_CXX" "LINK.host=$HOST_CXX" "AR.host=$HOST_AR" \
+  "CC.target=$NDK_CC" "CXX.target=$NDK_CXX" "LINK.target=$NDK_CXX" "AR.target=$NDK_AR" \
+  2>&1 | tee -a "$BUILD_LOG"
 BUILD_STATUS=${PIPESTATUS[0]}
 set -e
-if (( BUILD_STATUS != 0 )); then
+
+# Even a failed build must never regress to compiling obj.host with the Android target compiler.
+# On a successful build require evidence that both host and target compilation were observed.
+if (( BUILD_STATUS == 0 )); then
+  python3 "$ROOT/scripts/verify_node_android_toolchain_split.py" log \
+    "$BUILD_LOG" "$HOST_CC" "$HOST_CXX" "$NDK_CC" "$NDK_CXX" --require-observed \
+    || fail "node_android_toolchain_split_log_invalid"
+else
+  python3 "$ROOT/scripts/verify_node_android_toolchain_split.py" log \
+    "$BUILD_LOG" "$HOST_CC" "$HOST_CXX" "$NDK_CC" "$NDK_CXX" \
+    || fail "node_android_toolchain_split_log_invalid"
   fail "node_android_make_failed:status=${BUILD_STATUS}:log=${BUILD_LOG}"
 fi
 
