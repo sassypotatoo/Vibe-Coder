@@ -6,7 +6,6 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
-      - "crates/**"
       - "android/**"
       - "crates/vibecoder-android-host/**"
       - "crates/vibecoder-core/**"
@@ -20,12 +19,12 @@ on:
       - "PART34_STATE.json"
       - "scripts/**"
       - "config/android-*.json"
+      - "config/omniroute-android-runtime-profile.json"
       - ".github/workflows/android-diagnostic-apk.yml"
   pull_request:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
-      - "crates/**"
       - "android/**"
       - "crates/vibecoder-android-host/**"
       - "crates/vibecoder-core/**"
@@ -90,6 +89,7 @@ on:
       - "config/android-runtime-inventory.json"
       - "config/android-payload-provisioning.json"
       - "config/android-diagnostic-signing.json"
+      - "config/omniroute-android-runtime-profile.json"
       - ".github/workflows/android-diagnostic-apk.yml"
 
 permissions:
@@ -148,9 +148,13 @@ jobs:
         shell: bash
         run: python3 scripts/validate_checkpoint.py
 
-      - name: Validate Part 34 gateway/inference contracts
+      - name: Validate Part 34 runtime/gateway/inference contracts
         shell: bash
         run: |
+          python3 scripts/validate_part34_3.py
+          python3 scripts/test_part34_3_bundle_tools.py
+          python3 scripts/test_part34_3_asset_tools.py
+          python3 scripts/test_part34_3_service_tools.py
           python3 scripts/validate_part34_4.py
           python3 scripts/validate_part34_5.py
           python3 scripts/test_part34_5_inference_tools.py
@@ -427,9 +431,14 @@ jobs:
         shell: bash
         run: |
           python3 scripts/validate_checkpoint.py
+          python3 scripts/validate_part34_3.py
+          python3 scripts/test_part34_3_bundle_tools.py
+          python3 scripts/test_part34_3_asset_tools.py
+          python3 scripts/test_part34_3_service_tools.py
           python3 scripts/validate_part34_10.py
           python3 scripts/test_part34_10_ui_tools.py
           python3 scripts/test_part34_10_alpha_package_tools.py
+          python3 scripts/test_part34_10_compile_repairs.py
           bash scripts/part34_10_strict_java_compile.sh
 
       - name: Build one usable Alpha APK
