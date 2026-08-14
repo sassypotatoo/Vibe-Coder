@@ -86,7 +86,7 @@ cd "$WORK"
 # The archive identity was verified before extraction. Apply the smallest deterministic Android
 # integration patch required by Node's vendored zlib: ARMV8_OS_ANDROID calls android_getCpuFeatures(),
 # whose implementation lives in the NDK's source-only cpufeatures module.
-python3 "$ROOT/scripts/patch_node_android_zlib_cpufeatures.py" "$WORK" \
+python3 "$ROOT/scripts/patch_node_android_zlib_cpufeatures.py" "$WORK" "$NDK_CPUFEATURES_DIR" \
   | tee "$CONFIGURE_LOG" \
   || fail "node_android_cpufeatures_patch_failed:log=${CONFIGURE_LOG}"
 

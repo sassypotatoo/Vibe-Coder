@@ -84,12 +84,17 @@ production_head=gateway_chat.split('#[cfg(test)]',1)[0]
 if 'GatewayChatMessage' in production_head: die('gateway_chat_message_test_only_import_warning_regressed')
 if 'use vibecoder_gateway_contract::GatewayChatMessage;' not in gateway_chat: die('gateway_chat_message_test_import_missing')
 
-# Latest Node Android linker regression: Node 24.19.0's vendored zlib calls android_getCpuFeatures
-# under ARMV8_OS_ANDROID, so the NDK cpufeatures implementation must be added deterministically to
-# the zlib static library before GYP generates makefiles.
+# Latest Node Android linker regression: Node 24.19.0's vendored zlib calls
+# android_getCpuFeatures under ARMV8_OS_ANDROID. Absolute NDK source paths cannot be fed directly
+# to GYP because its Make backend objectifies them into impossible obj.target/...//usr/local paths.
+# Stage the exact NDK cpufeatures source/header inside the temporary Node tree and use only relative
+# GYP paths.
 cpupatch=ROOT/'scripts/patch_node_android_zlib_cpufeatures.py'
 with tempfile.TemporaryDirectory(prefix='vibecoder-node-cpufeatures-') as td:
-    node=Path(td)/'node'; target=node/'deps/zlib/zlib.gyp'; target.parent.mkdir(parents=True)
+    base=Path(td); node=base/'node'; target=node/'deps/zlib/zlib.gyp'; target.parent.mkdir(parents=True)
+    ndk=base/'ndk-cpufeatures'; ndk.mkdir()
+    (ndk/'cpu-features.c').write_text('int android_getCpuFeatures(void) { return 0; }\n', encoding='utf-8')
+    (ndk/'cpu-features.h').write_text('int android_getCpuFeatures(void);\n', encoding='utf-8')
     target.write_text("""{
   'targets': [{
     'target_name': 'zlib',
@@ -100,17 +105,23 @@ with tempfile.TemporaryDirectory(prefix='vibecoder-node-cpufeatures-') as td:
   }],
 }
 """, encoding='utf-8')
-    result=subprocess.run([sys.executable,str(cpupatch),str(node)], text=True, capture_output=True)
+    result=subprocess.run([sys.executable,str(cpupatch),str(node),str(ndk)], text=True, capture_output=True)
     if result.returncode: die('node_cpufeatures_patch_fixture_failed:'+result.stderr.strip())
     patched=target.read_text(encoding='utf-8')
-    for token in ('vibecoder-node-24.19.0-android-zlib-cpufeatures-v1',
-                  '<(android_ndk_path)/sources/android/cpufeatures/cpu-features.c',
-                  '<(android_ndk_path)/sources/android/cpufeatures'):
+    for token in ('vibecoder-node-24.19.0-android-zlib-cpufeatures-v2',
+                  '<(ZLIB_ROOT)/vibecoder-android-cpufeatures/cpu-features.c',
+                  '<(ZLIB_ROOT)/vibecoder-android-cpufeatures'):
         if token not in patched: die('node_cpufeatures_patch_output_missing:'+token)
-    again=subprocess.run([sys.executable,str(cpupatch),str(node)], text=True, capture_output=True)
+    staged=node/'deps/zlib/vibecoder-android-cpufeatures'
+    if (staged/'cpu-features.c').read_bytes() != (ndk/'cpu-features.c').read_bytes(): die('node_cpufeatures_staged_source_mismatch')
+    if (staged/'cpu-features.h').read_bytes() != (ndk/'cpu-features.h').read_bytes(): die('node_cpufeatures_staged_header_mismatch')
+    if '/sources/android/cpufeatures/cpu-features.c' in patched: die('node_cpufeatures_absolute_ndk_source_regressed')
+    again=subprocess.run([sys.executable,str(cpupatch),str(node),str(ndk)], text=True, capture_output=True)
     if again.returncode == 0 or 'node_android_cpufeatures_patch_already_applied' not in again.stderr:
         die('node_cpufeatures_patch_double_apply_not_rejected')
 if 'patch_node_android_zlib_cpufeatures.py' not in provision: die('node_cpufeatures_patch_not_invoked')
+patch_call='patch_node_android_zlib_cpufeatures.py" "$WORK" "$NDK_CPUFEATURES_DIR"'
+if patch_call not in provision: die('node_cpufeatures_patch_ndk_stage_argument_missing')
 if provision.index('patch_node_android_zlib_cpufeatures.py') > provision.index('./android-configure "$NDK_ROOT" "$API" arm64'): die('node_cpufeatures_patch_runs_after_configure')
 for token in ('android_ndk_cpufeatures_source_missing:', 'android_ndk_cpufeatures_header_missing:',
               'node_android_cpufeatures_patch_failed:'):
@@ -118,10 +129,8 @@ for token in ('android_ndk_cpufeatures_source_missing:', 'android_ndk_cpufeature
 if 'android_ndk_cpufeatures_missing' not in wrapper or 'node_android_zlib_cpufeatures_patch_failed' not in wrapper:
     die('node_cpufeatures_failure_classification_missing')
 
-# Deep-audit hardening: prove the source-level zlib patch survived GYP generation before the expensive
-# compile starts. Node's Make GYP backend converts compilable source paths to object paths, so the
-# generated graph must contain cpu-features.o in exactly one TARGET := zlib recipe and in zero host
-# makefiles. A .c-token fixture would be unrealistic and can falsely reject a valid GYP graph.
+# Generated graph must now contain the relative staged object exactly once in TARGET := zlib, never
+# the old absolute NDK-derived object path, and never any host recipe.
 graph_verify=ROOT/'scripts/verify_node_android_cpufeatures_integration.py'
 with tempfile.TemporaryDirectory(prefix='vibecoder-node-cpufeatures-graph-') as td:
     out=Path(td)/'out'; out.mkdir()
@@ -130,16 +139,16 @@ with tempfile.TemporaryDirectory(prefix='vibecoder-node-cpufeatures-graph-') as 
     target.write_text("""# generated zlib target
 TOOLSET := target
 TARGET := zlib
-INCS_Release := -I/ndk/sources/android/cpufeatures
-OBJS := $(obj).target/zlib//ndk/sources/android/cpufeatures/cpu-features.o
+INCS_Release := -Ideps/zlib/vibecoder-android-cpufeatures
+OBJS := $(obj).target/zlib/deps/zlib/vibecoder-android-cpufeatures/cpu-features.o
 """, encoding='utf-8')
     host.write_text('TOOLSET := host\nTARGET := node_js2c\n', encoding='utf-8')
     result=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
     if result.returncode: die('node_cpufeatures_generated_graph_fixture_failed:'+result.stderr.strip())
     payload=json.loads(result.stdout.strip())
     if payload.get('node_android_cpufeatures_generated_graph') != 'VERIFIED': die('node_cpufeatures_generated_graph_evidence_missing')
-    if not payload.get('object_token','').endswith('/cpu-features.o'): die('node_cpufeatures_generated_graph_object_evidence_missing')
-    host.write_text('TOOLSET := host\nTARGET := node_js2c\nOBJS := /ndk/sources/android/cpufeatures/cpu-features.o\n', encoding='utf-8')
+    if payload.get('absolute_ndk_object_regression') is not False: die('node_cpufeatures_absolute_graph_evidence_invalid')
+    host.write_text('TOOLSET := host\nTARGET := node_js2c\nOBJS := deps/zlib/vibecoder-android-cpufeatures/cpu-features.o\n', encoding='utf-8')
     leaked=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
     if leaked.returncode == 0 or 'cpufeatures_object_leaked_into_host_graph' not in leaked.stderr:
         die('node_cpufeatures_host_graph_leak_not_rejected')
@@ -149,9 +158,17 @@ OBJS := $(obj).target/zlib//ndk/sources/android/cpufeatures/cpu-features.o
     if missing.returncode == 0 or 'cpufeatures_object_missing_from_target_graph' not in missing.stderr:
         die('node_cpufeatures_missing_generated_target_not_rejected')
     target.write_text("""TOOLSET := target
-TARGET := not_zlib
+TARGET := zlib
 INCS_Release := -I/ndk/sources/android/cpufeatures
-OBJS := /ndk/sources/android/cpufeatures/cpu-features.o
+OBJS := $(obj).target/zlib//usr/local/lib/android/sdk/ndk/28.2.13676358/sources/android/cpufeatures/cpu-features.o
+""", encoding='utf-8')
+    absolute=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
+    if absolute.returncode == 0 or 'cpufeatures_absolute_ndk_object_regression' not in absolute.stderr:
+        die('node_cpufeatures_absolute_ndk_object_not_rejected')
+    target.write_text("""TOOLSET := target
+TARGET := not_zlib
+INCS_Release := -Ideps/zlib/vibecoder-android-cpufeatures
+OBJS := deps/zlib/vibecoder-android-cpufeatures/cpu-features.o
 """, encoding='utf-8')
     wrong_target=subprocess.run([sys.executable,str(graph_verify),str(out)], text=True, capture_output=True)
     if wrong_target.returncode == 0 or 'cpufeatures_object_in_non_zlib_target' not in wrong_target.stderr:
@@ -163,5 +180,41 @@ if provision.index(graph_call) < provision.index('make -j1 V=1 PYTHON=python3 ou
 if provision.index(graph_call) > provision.index('sanitize_node_android_host_makefiles.py'): die('node_cpufeatures_graph_verified_after_host_sanitizer')
 if 'node_android_cpufeatures_generated_graph_invalid' not in provision: die('node_cpufeatures_generated_graph_fail_closed_missing')
 if 'build_graph_integration_invalid' not in wrapper: die('node_cpufeatures_generated_graph_failure_classification_missing')
+if 'build_graph_source_path_invalid' not in wrapper or 'node_android_cpufeatures_absolute_object_path_invalid' not in wrapper:
+    die('node_cpufeatures_absolute_object_failure_classification_missing')
+
+# Part 34.10.10 automatic chat routing: normal questions remain direct model chat; clear coding
+# mutations enter the already-built single-shot agent action controller. The Android runtime must
+# attach the checkpoint store required by rollback-safe agent actions, and Stop must cancel both
+# direct model and Jcode action turns.
+host_cargo=tomllib.loads((ROOT/'crates/vibecoder-android-host/Cargo.toml').read_text())
+host_deps=host_cargo.get('dependencies',{})
+for dep in ('vibecoder-checkpoint-local','vibecoder-routing'):
+    if dep not in host_deps: die('android_agent_routing_dependency_missing:'+dep)
+ffi=(ROOT/'crates/vibecoder-android-host/src/app_controller_ffi.rs').read_text()
+for token in (
+    '.with_checkpoint_store(checkpoint_store)',
+    'fn classify_chat_route(prompt: &str) -> ChatRoute',
+    'ChatRoute::ModelChat',
+    'ChatRoute::AgentAction',
+    'run_persisted_model_conversation_turn_cancellable(',
+    'run_persisted_agent_action_turn(',
+    'turn_kind: "model_chat"',
+    'turn_kind: "agent_action"',
+    'successful_mutation_tool_calls: Some(outcome.successful_mutation_tool_calls())',
+    'cancel_persisted_conversation_turn(project_id, conversation_id)',
+):
+    if token not in ffi: die('android_agent_routing_contract_missing:'+token)
+if 'run_explicit_agent_loop' in ffi or 'run_persisted_explicit' in ffi:
+    die('automatic_chat_routing_must_not_enable_outer_loop')
+# Lock the concrete examples that motivated this wiring inside Rust unit tests, so the next real
+# cargo test/build cannot silently change intended routing semantics.
+for prompt in (
+    'Add a Start button to the home screen',
+    'Home screen pe Start button bana do',
+    'How do I add a button in Android?',
+    'What is Rust ownership?',
+):
+    if prompt not in ffi: die('android_agent_routing_regression_prompt_missing:'+prompt)
 
 print('Part 34.10 compile-log repair regression PASSED')

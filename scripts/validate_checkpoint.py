@@ -4122,8 +4122,9 @@ def check_part34_2_node_staging_lane() -> None:
         if token not in provision:
             fail(f"Part 34.2 Node generated-staging/cross-build contract missing: {token}")
     for token in (
-        "vibecoder-node-24.19.0-android-zlib-cpufeatures-v1",
-        "<(android_ndk_path)/sources/android/cpufeatures/cpu-features.c",
+        "vibecoder-node-24.19.0-android-zlib-cpufeatures-v2",
+        "<(ZLIB_ROOT)/vibecoder-android-cpufeatures/cpu-features.c",
+        "<(ZLIB_ROOT)/vibecoder-android-cpufeatures",
         "node_android_cpufeatures_patch_already_applied",
     ):
         if token not in node_cpufeatures_patch:
@@ -4132,6 +4133,7 @@ def check_part34_2_node_staging_lane() -> None:
         "node_android_cpufeatures_generated_graph",
         "cpufeatures_object_missing_from_target_graph",
         "cpufeatures_object_leaked_into_host_graph",
+        "cpufeatures_absolute_ndk_object_regression",
         "OBJECT_TOKEN",
         "TARGET_RE",
     ):
@@ -4196,7 +4198,8 @@ def check_part34_2_node_staging_lane() -> None:
     for token in ('vibecoder_core_tokio_direct_dependency_missing', 'old_android_compiler_for_obj_host_not_rejected',
                   'undefined_is_forbidden_control_regression_present', 'node_cpufeatures_patch_fixture_failed',
                   'node_cpufeatures_failure_classification_missing', 'node_cpufeatures_generated_graph_fixture_failed',
-                  'node_cpufeatures_host_graph_leak_not_rejected'):
+                  'node_cpufeatures_host_graph_leak_not_rejected', 'node_cpufeatures_absolute_ndk_object_not_rejected',
+                  'android_agent_routing_contract_missing'):
         if token not in compile_repair_test:
             fail(f"Part 34.10 compile-log repair regression missing: {token}")
 

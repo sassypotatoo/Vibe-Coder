@@ -1,0 +1,53 @@
+{
+  "agent_action_routing": {
+    "agent_action_stop_cancellation_wired": true,
+    "checkpoint_store_attached_to_android_core": true,
+    "clear_coding_mutation_requests_route_to_single_agent_action_turn": true,
+    "exact_selected_model_policy_no_fallbacks": true,
+    "explanation_style_questions_remain_model_chat": true,
+    "explicit_outer_loop_auto_enabled": false,
+    "normal_model_chat_path_preserved": true,
+    "response_reports_turn_kind": true
+  },
+  "compile_safety": {
+    "android_host_changed_for_agent_routing": true,
+    "external_ci_recompile_required": true,
+    "jcode_cross_build_script_changed": false,
+    "jcode_vendored_source_changed": false,
+    "minimal_or_jcode_apk_post_fix_recompiled": false,
+    "node_build_scripts_changed": true
+  },
+  "external_ci_recompile_required": true,
+  "latest_ci_observations": {
+    "jcode_apk_build_passed": true,
+    "jcode_apk_sha256": "e770b3fd99b9366054e9ece923d39bea223be0f61c77de5fcd315d2b9da39076",
+    "minimal_apk_build_passed": true,
+    "minimal_apk_sha256": "ff19e67fcb8df615b9b3fdfba72bbc7f94db047cc15f1aac6bc88367b8e20235",
+    "node_binary_produced": false,
+    "node_failure": "No rule to make target for obj.target/zlib//<absolute NDK path>/sources/android/cpufeatures/cpu-features.o",
+    "node_generated_cpufeatures_graph_verifier_passed": true,
+    "node_generated_graph_object_observed": "sources/android/cpufeatures/cpu-features.o",
+    "node_target_compile_count_before_failure": 1121
+  },
+  "node_repair": {
+    "absolute_ndk_object_graph_rejected": true,
+    "expected_generated_object": "deps/zlib/vibecoder-android-cpufeatures/cpu-features.o",
+    "gyp_include": "<(ZLIB_ROOT)/vibecoder-android-cpufeatures",
+    "gyp_source": "<(ZLIB_ROOT)/vibecoder-android-cpufeatures/cpu-features.c",
+    "ndk_source_and_header_copied_byte_for_byte_into_temporary_node_tree": true,
+    "patch_id": "vibecoder-node-24.19.0-android-zlib-cpufeatures-v2",
+    "staged_relative_directory": "deps/zlib/vibecoder-android-cpufeatures"
+  },
+  "node_root_cause": {
+    "cause": "GYP Make objectified an absolute NDK cpu-features.c path under obj.target/zlib, producing an impossible make target",
+    "failure_class": "absolute_source_path_objectification",
+    "generated_graph_guard_was_passed": true,
+    "source_patch_was_applied": true
+  },
+  "post_fix_compile_claim": false,
+  "project": "VibeCoder",
+  "schema": 1,
+  "source_baseline": "34.10.9-node-gyp-graph-verifier-repair",
+  "status": "node_relative_cpufeatures_and_agent_routing_recompile_pending",
+  "step": "34.10.10-node-relative-cpufeatures-agent-routing"
+}

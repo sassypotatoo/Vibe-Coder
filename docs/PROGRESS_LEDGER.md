@@ -1016,8 +1016,8 @@ Status: **SOURCE WIRED; REAL ANDROID/RUST/OMNIROUTE ROUND-TRIP PROOF PENDING**
   instead of assuming Java thread interruption cancels native work.
 - [x] Re-ran strict Java 17 warnings-as-errors against local Android stubs and Clang C/JNI signature
   compile with a generated NativeBridge header.
-- [ ] Automatic UI intent routing into the already-built Jcode coding-action controller; current
-  Send is intentionally the normal-conversation path only.
+- [x] Part 34.10.10 adds conservative automatic Send routing into the already-built Jcode coding-action
+  controller for clear project-mutation requests while explanation/general questions remain normal model chat.
 - [ ] Provider credential/setup UI when the fresh OmniRoute catalog exposes no usable model.
 - [ ] Live Preview runtime.
 - [ ] Fresh Cargo/Rust + Gradle/NDK compile and physical-device normal-chat round trip.
@@ -1078,3 +1078,34 @@ Status: **SECOND COMPILE FAILURES REPAIRED; NEXT ANDROID RECOMPILE PENDING**
 - [x] Added `verify_node_android_cpufeatures_integration.py` after GYP generation and before compilation. It requires exactly one zlib Android target makefile to contain the NDK `cpu-features.c` source and rejects any host-makefile leakage.
 - [x] Added fail-closed regression coverage for missing target integration and host-graph leakage.
 - [ ] Fresh Rust/Android compile is not claimed in the audit runner because Cargo/Rust and Android SDK/NDK are unavailable here; GitHub CI remains the external compiler proof gate.
+
+### Part 34.10.10 — Node relative cpufeatures staging + agent-action Send routing
+
+Status: **SOURCE REPAIR + ROUTING WIRED; EXTERNAL RECOMPILE PENDING**
+
+- [x] Preserved the latest external CI evidence that the minimal diagnostic APK and Jcode diagnostic
+  APK both build and pass APK verification; no vendored Jcode source or Jcode/Part31 build script is
+  modified by this checkpoint.
+- [x] Reproduced the next real Node failure after the 34.10.9 graph guard passed: GYP objectified the
+  absolute NDK `sources/android/cpufeatures/cpu-features.c` path into the impossible target
+  `obj.target/zlib//usr/local/.../cpu-features.o`.
+- [x] Stage the exact pinned-NDK `cpu-features.c` and `cpu-features.h` byte-for-byte inside the
+  temporary Node source tree at `deps/zlib/vibecoder-android-cpufeatures/`; zlib now references only
+  that relative build-tree path.
+- [x] Update the generated-graph verifier to require the relative
+  `deps/zlib/vibecoder-android-cpufeatures/cpu-features.o`, bind it to `TARGET := zlib`, reject host
+  leakage, and reject any regression back to an absolute NDK object path.
+- [x] Wire Android app-controller Send routing conservatively: ordinary/explanation questions keep the
+  existing one-shot model-conversation path; clear coding/project mutation requests use exactly one
+  persisted Jcode agent-action turn.
+- [x] Attach the app-private local checkpoint store to the Android core before exposing the action
+  route, preserving rollback-safe agent mutations rather than bypassing the Part 34.8 checkpoint gate.
+- [x] Preserve exact selected-model execution with no fallback list for the automatic action route.
+- [x] Extend Stop/cancel so an active routed agent-action turn requests the existing persisted-turn/Jcode
+  cancellation path.
+- [x] Keep the explicit outer loop disabled. Automatic action routing performs one bounded outer user
+  turn; repeated autonomous looping still requires the explicit Part 34.9 opt-in contract.
+- [ ] Post-change Rust/Android compile is not claimed in this runner because Cargo/Rust and the Android
+  SDK/NDK are unavailable here. The next GitHub CI run must reconfirm Minimal + Jcode and prove the
+  repaired Node build before the full Alpha package can be claimed.
+

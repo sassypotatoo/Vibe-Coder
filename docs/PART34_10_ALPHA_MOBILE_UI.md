@@ -221,3 +221,34 @@ false is automatic UI selection of the coding-action path. The downloaded Jcode 
 not the full Alpha package: it proves Jcode packaging/execution compatibility but does not package the
 Node + OmniRoute runtime required by the real chat bootstrap. This checkpoint does not claim a Node
 binary or full Alpha APK until the repaired verifier and downstream build pass external CI.
+
+## Part 34.10.10 — conservative coding-action routing and Node cpufeatures path repair
+
+The normal Chat composer now has two real backend routes behind the same Send control. A deterministic,
+conservative classifier keeps general conversation and explanation-style coding questions on the existing
+one-shot persisted model-conversation path. A clear project mutation request, for example “Add a Start
+button to the home screen,” selects one persisted agent-action turn instead. This is routing, not an
+autonomous outer loop: Part 34.9 loop mode remains explicitly opt-in.
+
+The routed action path uses the exact model selected during bootstrap with an empty fallback list and the
+existing before-response fallback boundary. The Android core now also owns an app-private
+`LocalCheckpointStore`; this is required by the Part 34.8 action contract so a Jcode mutation remains
+checkpointed/rollback-safe. Stop distinguishes a cancellable model turn from an active agent action and
+uses the existing persisted conversation/Jcode cancellation contract for the latter. The JNI response
+reports `turn_kind` plus mutation evidence for action turns, so Java/UI does not need to invent whether a
+workspace change occurred.
+
+The latest external CI before this source change again proved both the Minimal and Jcode diagnostic APK
+lanes. The Node lane then progressed past the 34.10.9 generated-graph verifier and exposed a real Make
+dependency failure: an absolute NDK cpufeatures source path became an impossible
+`obj.target/zlib//usr/local/.../cpu-features.o` target. Part 34.10.10 copies the exact pinned-NDK
+`cpu-features.c`/`.h` into the temporary Node tree at
+`deps/zlib/vibecoder-android-cpufeatures/` and references that relative source from zlib GYP. The graph
+verifier now requires the corresponding relative `.o`, rejects host leakage, and explicitly rejects the
+absolute-object regression. No fake cpufeatures implementation is introduced.
+
+This checkpoint is still source/regression evidence. Because the current audit runner has no Cargo/Rust
+or Android SDK/NDK, the modified Android-host Rust has not been recompiled here. Minimal/Jcode must be
+reconfirmed and Node must pass the new relative-source build in external CI before a full Alpha APK or
+physical coding-action round trip is claimed.
+

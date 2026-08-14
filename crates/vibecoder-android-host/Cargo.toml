@@ -17,6 +17,7 @@ sha2.workspace = true
 uuid.workspace = true
 vibecoder-core = { path = "../vibecoder-core" }
 vibecoder-persistence-local = { path = "../vibecoder-persistence-local" }
+vibecoder-checkpoint-local = { path = "../vibecoder-checkpoint-local" }
 vibecoder-workspace-local = { path = "../vibecoder-workspace-local" }
 vibecoder-gateway-contract = { path = "../vibecoder-gateway-contract" }
 vibecoder-gateway-omniroute = { path = "../vibecoder-gateway-omniroute" }
@@ -25,3 +26,4 @@ vibecoder-domain = { path = "../vibecoder-domain" }
 vibecoder-process-contract = { path = "../vibecoder-process-contract" }
 vibecoder-process-local = { path = "../vibecoder-process-local" }
 vibecoder-runtime-packaging = { path = "../vibecoder-runtime-packaging" }
+vibecoder-routing = { path = "../vibecoder-routing" }

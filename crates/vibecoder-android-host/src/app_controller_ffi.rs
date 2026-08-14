@@ -10,11 +10,13 @@ use std::os::raw::c_char;
 use std::sync::{Arc, Mutex, OnceLock};
 use uuid::Uuid;
 use vibecoder_agent_jcode::JcodeAgentRuntime;
+use vibecoder_checkpoint_local::{LocalCheckpointConfig, LocalCheckpointStore};
 use vibecoder_core::{ConversationModelTurnCancellation, VibeCoderCore};
 use vibecoder_domain::{ConversationId, ModelRef, ProjectId, Result, VibeCoderError};
 use vibecoder_gateway_contract::{GatewayCredential, GatewayExecutionProfile};
 use vibecoder_gateway_omniroute::{OmniRouteClient, OmniRouteConfig};
 use vibecoder_persistence_local::{LocalProjectStateConfig, LocalProjectStateStore};
+use vibecoder_routing::{ModelRoutePolicyConfig, ModelRouteTargetConfig};
 use vibecoder_workspace_local::{LocalWorkspaceConfig, LocalWorkspaceRuntime};
 
 const CHAT_MAX_PROMPT_BYTES: usize = 128 * 1024;
@@ -36,10 +38,16 @@ struct AndroidAppController {
 }
 
 #[derive(Clone)]
+enum ActiveChatCancellation {
+    Model(ConversationModelTurnCancellation),
+    AgentAction,
+}
+
+#[derive(Clone)]
 struct ActiveChatTurn {
     project_id: ProjectId,
     conversation_id: ConversationId,
-    cancellation: ConversationModelTurnCancellation,
+    cancellation: ActiveChatCancellation,
 }
 
 struct ActiveTurnRegistration<'a> {
@@ -95,6 +103,7 @@ struct CreateChatSnapshot {
 struct SendChatSnapshot {
     schema: u32,
     status: &'static str,
+    turn_kind: &'static str,
     project_id: String,
     conversation_id: String,
     model_id: String,
@@ -104,6 +113,9 @@ struct SendChatSnapshot {
     input_tokens: Option<u64>,
     output_tokens: Option<u64>,
     cached_input_tokens: Option<u64>,
+    successful_file_tool_calls: Option<usize>,
+    successful_mutation_tool_calls: Option<usize>,
+    workspace_change_proven: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -291,7 +303,17 @@ unsafe fn chat_send_bytes(
     }
 
     let controller = current_controller()?;
-    let cancellation = ConversationModelTurnCancellation::new();
+    let model = controller.select_exact_model()?;
+    let route = classify_chat_route(prompt);
+    let model_cancellation = if route == ChatRoute::ModelChat {
+        Some(ConversationModelTurnCancellation::new())
+    } else {
+        None
+    };
+    let active_cancellation = match model_cancellation.as_ref() {
+        Some(value) => ActiveChatCancellation::Model(value.clone()),
+        None => ActiveChatCancellation::AgentAction,
+    };
     {
         let mut active = controller
             .active_turn
@@ -303,7 +325,7 @@ unsafe fn chat_send_bytes(
         *active = Some(ActiveChatTurn {
             project_id,
             conversation_id,
-            cancellation: cancellation.clone(),
+            cancellation: active_cancellation,
         });
     }
     let _registration = ActiveTurnRegistration {
@@ -312,32 +334,75 @@ unsafe fn chat_send_bytes(
         conversation_id,
     };
 
-    let model = controller.select_exact_model()?;
-    let outcome = controller.executor.block_on(
-        controller.core.run_persisted_model_conversation_turn_cancellable(
-            project_id,
-            conversation_id,
-            GatewayCredential::Anonymous,
-            &model.id,
-            CHAT_MAX_OUTPUT_TOKENS,
-            prompt,
-            &cancellation,
-        ),
-    )?;
-    let usage = outcome.usage();
-    serialize_bounded(&SendChatSnapshot {
-        schema: 1,
-        status: "completed",
-        project_id: project_id.0.hyphenated().to_string(),
-        conversation_id: conversation_id.0.hyphenated().to_string(),
-        model_id: outcome.model().id.clone(),
-        observed_model_id: outcome.observed_model_id().map(str::to_owned),
-        finish_reason: outcome.finish_reason().map(str::to_owned),
-        assistant_text: outcome.assistant_text().to_owned(),
-        input_tokens: usage.map(|value| value.input),
-        output_tokens: usage.map(|value| value.output),
-        cached_input_tokens: usage.and_then(|value| value.cache_read_input),
-    })
+    match route {
+        ChatRoute::ModelChat => {
+            let cancellation = model_cancellation
+                .as_ref()
+                .ok_or_else(|| host_error("android_chat_model_cancellation_missing"))?;
+            let outcome = controller.executor.block_on(
+                controller.core.run_persisted_model_conversation_turn_cancellable(
+                    project_id,
+                    conversation_id,
+                    GatewayCredential::Anonymous,
+                    &model.id,
+                    CHAT_MAX_OUTPUT_TOKENS,
+                    prompt,
+                    cancellation,
+                ),
+            )?;
+            let usage = outcome.usage();
+            serialize_bounded(&SendChatSnapshot {
+                schema: 1,
+                status: "completed",
+                turn_kind: "model_chat",
+                project_id: project_id.0.hyphenated().to_string(),
+                conversation_id: conversation_id.0.hyphenated().to_string(),
+                model_id: outcome.model().id.clone(),
+                observed_model_id: outcome.observed_model_id().map(str::to_owned),
+                finish_reason: outcome.finish_reason().map(str::to_owned),
+                assistant_text: outcome.assistant_text().to_owned(),
+                input_tokens: usage.map(|value| value.input),
+                output_tokens: usage.map(|value| value.output),
+                cached_input_tokens: usage.and_then(|value| value.cache_read_input),
+                successful_file_tool_calls: None,
+                successful_mutation_tool_calls: None,
+                workspace_change_proven: None,
+            })
+        }
+        ChatRoute::AgentAction => {
+            let policy = exact_model_route_policy(&model);
+            let outcome = controller.executor.block_on(
+                controller.core.run_persisted_agent_action_turn(
+                    project_id,
+                    conversation_id,
+                    GatewayCredential::Anonymous,
+                    &policy,
+                    prompt,
+                    None,
+                ),
+            )?;
+            let backend = outcome.backend();
+            let turn = backend.turn();
+            let usage = turn.usage;
+            serialize_bounded(&SendChatSnapshot {
+                schema: 1,
+                status: "completed",
+                turn_kind: "agent_action",
+                project_id: project_id.0.hyphenated().to_string(),
+                conversation_id: conversation_id.0.hyphenated().to_string(),
+                model_id: backend.model().id.clone(),
+                observed_model_id: None,
+                finish_reason: None,
+                assistant_text: turn.text.clone(),
+                input_tokens: usage.map(|value| value.input),
+                output_tokens: usage.map(|value| value.output),
+                cached_input_tokens: usage.and_then(|value| value.cache_read_input),
+                successful_file_tool_calls: Some(outcome.successful_file_tool_calls()),
+                successful_mutation_tool_calls: Some(outcome.successful_mutation_tool_calls()),
+                workspace_change_proven: Some(outcome.workspace_change_proven()),
+            })
+        }
+    }
 }
 
 unsafe fn chat_cancel_bytes(
@@ -350,19 +415,30 @@ unsafe fn chat_cancel_bytes(
     let project_id = unsafe { parse_project_id_cstr(project_id)? };
     let conversation_id = unsafe { parse_conversation_id_cstr(conversation_id)? };
     let controller = current_controller()?;
-    let active = controller
-        .active_turn
-        .lock()
-        .map_err(|_| host_error("android_chat_active_turn_poisoned"))?;
-    let requested = if let Some(turn) = active.as_ref() {
-        if turn.project_id == project_id && turn.conversation_id == conversation_id {
-            turn.cancellation.request();
+    let cancellation = {
+        let active = controller
+            .active_turn
+            .lock()
+            .map_err(|_| host_error("android_chat_active_turn_poisoned"))?;
+        active.as_ref().and_then(|turn| {
+            (turn.project_id == project_id && turn.conversation_id == conversation_id)
+                .then(|| turn.cancellation.clone())
+        })
+    };
+    let requested = match cancellation {
+        Some(ActiveChatCancellation::Model(cancellation)) => {
+            cancellation.request();
             true
-        } else {
-            false
         }
-    } else {
-        false
+        Some(ActiveChatCancellation::AgentAction) => {
+            controller.executor.block_on(
+                controller
+                    .core
+                    .cancel_persisted_conversation_turn(project_id, conversation_id),
+            )?;
+            true
+        }
+        None => false,
     };
     serialize_bounded(&CancelChatSnapshot {
         schema: 1,
@@ -386,11 +462,15 @@ impl AndroidAppController {
             app_private_dir: app_private_dir.clone(),
         })?;
         let store = Arc::new(LocalProjectStateStore::initialize(LocalProjectStateConfig {
+            app_private_dir: app_private_dir.clone(),
+        })?);
+        let checkpoint_store = Arc::new(LocalCheckpointStore::initialize(LocalCheckpointConfig {
             app_private_dir,
         })?);
         let core = VibeCoderCore::new(agent, gateway, workspace)
             .with_project_state_store(store.clone())
-            .with_conversation_store(store);
+            .with_conversation_store(store)
+            .with_checkpoint_store(checkpoint_store);
         Ok(Self {
             key,
             core,
@@ -460,6 +540,85 @@ impl AndroidAppController {
             .map_err(|_| host_error("android_chat_model_selection_poisoned"))?
             .clone()
             .ok_or_else(|| host_error("android_chat_no_usable_models"))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChatRoute {
+    ModelChat,
+    AgentAction,
+}
+
+fn exact_model_route_policy(model: &ModelRef) -> ModelRoutePolicyConfig {
+    ModelRoutePolicyConfig {
+        primary: ModelRouteTargetConfig {
+            model_id: model.id.clone(),
+            provider: model.provider.clone(),
+        },
+        fallbacks: Vec::new(),
+        fallback_on: Vec::new(),
+        fallback_boundary: Default::default(),
+    }
+}
+
+fn classify_chat_route(prompt: &str) -> ChatRoute {
+    // Keep automatic mutation routing conservative. A coding/project target and an action verb are
+    // both required. Explanation-style questions remain normal model chat unless the user clearly
+    // addresses the assistant with a direct request. This does not enable the explicit outer loop.
+    let normalized = prompt
+        .chars()
+        .flat_map(char::to_lowercase)
+        .map(|ch| if ch.is_alphanumeric() { ch } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let padded = format!(" {normalized} ");
+    let has_word = |word: &str| padded.contains(&format!(" {word} "));
+    let has_phrase = |phrase: &str| padded.contains(&format!(" {phrase} "));
+
+    let target = [
+        "app", "project", "code", "file", "button", "screen", "ui", "layout", "page",
+        "component", "feature", "function", "class", "method", "bug", "error", "android",
+        "gradle", "manifest", "xml", "html", "css", "javascript", "typescript", "kotlin",
+        "java", "rust", "dependency", "route", "api", "endpoint", "test", "tests",
+    ]
+    .iter()
+    .any(|word| has_word(word));
+    if !target {
+        return ChatRoute::ModelChat;
+    }
+
+    let action = [
+        "add", "create", "make", "implement", "build", "fix", "change", "update", "remove",
+        "delete", "rename", "edit", "modify", "refactor", "wire", "connect", "replace",
+        "insert", "generate", "design", "bana", "banao", "bnado", "bna", "karo", "kardo",
+        "lagao", "jodo", "hatao", "theek", "thik",
+    ]
+    .iter()
+    .any(|word| has_word(word));
+    if !action {
+        return ChatRoute::ModelChat;
+    }
+
+    let direct_request = [
+        "please", "can you", "could you", "would you", "i want you to", "bana do", "bana de",
+        "bna do", "bna de", "kar do", "kar de", "kardo", "laga do", "jod do", "hata do",
+    ]
+    .iter()
+    .any(|phrase| has_phrase(phrase));
+    let explanation_prefix = [
+        "how ", "how to ", "how do i ", "how can i ", "why ", "what ", "what is ",
+        "where ", "when ", "which ", "who ", "can i ", "should i ", "kya ", "kaise ",
+        "kyu ", "kyun ", "explain ", "tell me ", "samjha ",
+    ]
+    .iter()
+    .any(|prefix| normalized.starts_with(prefix));
+
+    if explanation_prefix && !direct_request {
+        ChatRoute::ModelChat
+    } else {
+        ChatRoute::AgentAction
     }
 }
 
@@ -587,4 +746,42 @@ fn stable_error_code(error: &VibeCoderError) -> String {
         });
     }
     if out.is_empty() { "unknown_error".into() } else { out }
+}
+
+
+#[cfg(test)]
+mod app_controller_route_tests {
+    use super::{classify_chat_route, ChatRoute};
+
+    #[test]
+    fn routes_clear_coding_mutations_to_agent_action() {
+        for prompt in [
+            "Add a Start button to the home screen",
+            "Please fix this Gradle error",
+            "Home screen pe Start button bana do",
+            "Connect the API endpoint to this page",
+        ] {
+            assert_eq!(classify_chat_route(prompt), ChatRoute::AgentAction, "{prompt}");
+        }
+    }
+
+    #[test]
+    fn keeps_questions_and_non_coding_chat_on_model_path() {
+        for prompt in [
+            "How do I add a button in Android?",
+            "Why is this Gradle error happening?",
+            "What is Rust ownership?",
+            "Tell me a joke",
+        ] {
+            assert_eq!(classify_chat_route(prompt), ChatRoute::ModelChat, "{prompt}");
+        }
+    }
+
+    #[test]
+    fn direct_question_form_can_still_request_an_action() {
+        assert_eq!(
+            classify_chat_route("Can you add a Start button to the app?"),
+            ChatRoute::AgentAction
+        );
+    }
 }

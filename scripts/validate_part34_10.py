@@ -18,6 +18,7 @@ manifest=read(Path('android/app/src/main/AndroidManifest.xml'))
 workflow=read(Path('.github/workflows/android-diagnostic-apk.yml'))
 strict_java=read(Path('scripts/part34_10_strict_java_compile.sh'))
 core_manifest=read(Path('crates/vibecoder-core/Cargo.toml'))
+host_manifest=read(Path('crates/vibecoder-android-host/Cargo.toml'))
 cargo_lock=read(Path('Cargo.lock'))
 node_provision=read(Path('scripts/provision_node_android.sh'))
 node_split=read(Path('scripts/verify_node_android_toolchain_split.py'))
@@ -40,6 +41,7 @@ compile_audit=json.loads(read(Path('docs/evidence/part34_10_6_compile_log_audit.
 latest_compile_audit=json.loads(read(Path('docs/evidence/part34_10_7_compile_log_audit.json')))
 deep_audit=json.loads(read(Path('docs/evidence/part34_10_8_deep_source_audit.json')))
 graph_repair=json.loads(read(Path('docs/evidence/part34_10_9_node_gyp_graph_repair.json')))
+latest_repair=json.loads(read(Path('docs/evidence/part34_10_10_node_relative_cpufeatures_agent_routing.json')))
 project=json.loads(read(Path('PROJECT_STATE.json')))['part34_10_alpha_mobile_ui']
 state=json.loads(read(Path('PART34_STATE.json')))['alpha_mobile_ui']
 
@@ -113,6 +115,17 @@ for token in ('pub async fn run_persisted_conversation_turn(',
               '.chat_completion(gateway_credential, &request)'):
     need(core, token, 'real conversation / coding-agent source capability')
 
+for token in ('fn classify_chat_route(prompt: &str) -> ChatRoute',
+              'ChatRoute::ModelChat', 'ChatRoute::AgentAction',
+              'run_persisted_agent_action_turn(', 'turn_kind: "agent_action"',
+              '.with_checkpoint_store(checkpoint_store)',
+              'cancel_persisted_conversation_turn(project_id, conversation_id)'):
+    need(host, token, 'automatic normal-chat / coding-agent routing')
+for token in ('vibecoder-checkpoint-local', 'vibecoder-routing'):
+    need(host_manifest, token, 'Android host agent-routing dependency')
+if 'run_explicit_agent_loop' in host or 'run_persisted_explicit' in host:
+    raise SystemExit('Part 34.10 automatic chat routing must not auto-enable explicit outer loop')
+
 need(strings, '<string name="app_name">VibeCoder</string>', 'app label')
 need(manifest, 'android:windowSoftInputMode="adjustResize"', 'IME resize boundary')
 need(workflow, 'bash scripts/part34_10_strict_java_compile.sh', 'strict Java CI gate')
@@ -185,7 +198,7 @@ expected={
  'portrait_mobile_shell':True,'chat_tab':True,'preview_tab':True,'old_chat_drawer':True,
  'fake_sample_chats':False,'send_controller_jni_wired':True,'stop_controller_jni_wired':True,
  'new_chat_controller_jni_wired':True,'normal_conversation_send_wired':True,
- 'coding_agent_send_ui_wired':False,'omniroute_auto_install_on_app_open_wired':True,
+ 'coding_agent_send_ui_wired':True,'omniroute_auto_install_on_app_open_wired':True,
  'omniroute_auto_start_on_app_open_wired':True,'omniroute_manual_runtime_setup_required':False,
  'provider_setup_ui_wired':False,'selected_model_from_fresh_exact_catalog':True,
  'selected_model_ascii_safe_filtered':True,'bootstrap_catalog_readiness_retry_bounded':True,
@@ -216,16 +229,16 @@ if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'node_gyp_graph_verifier_repaired_recompile_pending':
-    raise SystemExit('Part 34.10.9 PROJECT_STATE repair status mismatch')
-if project.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
-    raise SystemExit('Part 34.10.9 PROJECT_STATE repair step mismatch')
+if project.get('status') != 'node_relative_cpufeatures_and_agent_routing_recompile_pending':
+    raise SystemExit('Part 34.10.10 PROJECT_STATE repair status mismatch')
+if project.get('step') != '34.10.10-node-relative-cpufeatures-agent-routing':
+    raise SystemExit('Part 34.10.10 PROJECT_STATE repair step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
  'fake_model_replies':False,'send_bridge_wired':True,'stop_bridge_wired':True,
  'new_chat_bridge_wired':True,'normal_conversation_send_wired':True,
- 'coding_agent_send_ui_wired':False,'omniroute_auto_install_wired':True,
+ 'coding_agent_send_ui_wired':True,'omniroute_auto_install_wired':True,
  'omniroute_auto_start_wired':True,'omniroute_manual_runtime_setup_required':False,
  'provider_setup_ui_wired':False,'selected_model_from_fresh_exact_catalog':True,
  'selected_model_ascii_safe_filtered':True,'bootstrap_catalog_readiness_retry_bounded':True,
@@ -257,10 +270,10 @@ if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'node_gyp_graph_verifier_repaired_recompile_pending':
-    raise SystemExit('Part 34.10.9 PART34_STATE repair status mismatch')
-if state.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
-    raise SystemExit('Part 34.10.9 PART34_STATE repair step mismatch')
+if state.get('status') != 'node_relative_cpufeatures_and_agent_routing_recompile_pending':
+    raise SystemExit('Part 34.10.10 PART34_STATE repair status mismatch')
+if state.get('step') != '34.10.10-node-relative-cpufeatures-agent-routing':
+    raise SystemExit('Part 34.10.10 PART34_STATE repair step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -300,8 +313,9 @@ if 'value.chars().any(char::is_control)' not in process_local or 'is_forbidden_c
     raise SystemExit('Part 34.10 runtime-service control predicate compile repair regressed')
 if 'GatewayChatMessage' in gateway_chat.split('#[cfg(test)]',1)[0]:
     raise SystemExit('Part 34.10 gateway test-only import warning regressed')
-for token in ('vibecoder-node-24.19.0-android-zlib-cpufeatures-v1',
-              '<(android_ndk_path)/sources/android/cpufeatures/cpu-features.c',
+for token in ('vibecoder-node-24.19.0-android-zlib-cpufeatures-v2',
+              '<(ZLIB_ROOT)/vibecoder-android-cpufeatures/cpu-features.c',
+              '<(ZLIB_ROOT)/vibecoder-android-cpufeatures',
               'node_android_cpufeatures_patch_already_applied'):
     need(node_cpufeatures_patch, token, 'Node Android zlib cpufeatures linkage patch')
 for token in ('patch_node_android_zlib_cpufeatures.py', 'android_ndk_cpufeatures_source_missing:',
@@ -322,38 +336,52 @@ for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
                 'node_cpufeatures_generated_graph_false_negative_repaired',
                 'latest_ci_minimal_apk_proven','latest_ci_jcode_apk_proven',
                 'real_chat_interaction_source_wired','model_request_pipeline_source_wired',
-                'agent_action_controller_source_implemented'):
+                'agent_action_controller_source_implemented','node_cpufeatures_generated_graph_ci_proven',
+                'node_cpufeatures_relative_staging_fix_applied',
+                'node_cpufeatures_absolute_object_regression_guard_added',
+                'latest_ci_node_absolute_cpufeatures_object_failure_observed',
+                'coding_agent_send_ui_wired','agent_action_checkpoint_store_wired',
+                'agent_action_auto_routing_conservative','agent_action_stop_cancellation_wired',
+                'agent_action_route_exact_selected_model_only'):
         if record.get(key) is not True:
-            raise SystemExit(f'Part 34.10.9 {label} repair/evidence flag missing: {key}')
-    if record.get('node_cpufeatures_generated_graph_ci_proven') is not False:
-        raise SystemExit(f'Part 34.10.9 {label} overclaims repaired cpufeatures graph CI proof')
-    if record.get('coding_agent_send_ui_wired') is not False:
-        raise SystemExit(f'Part 34.10.9 {label} overclaims coding-agent UI dispatch')
+            raise SystemExit(f'Part 34.10.10 {label} repair/evidence flag missing: {key}')
+    if record.get('agent_action_outer_loop_auto_enabled') is not False:
+        raise SystemExit(f'Part 34.10.10 {label} must not auto-enable explicit outer loop')
     if record.get('jcode_diagnostic_apk_full_chat_expected') is not False:
-        raise SystemExit(f'Part 34.10.9 {label} diagnostic APK/full Alpha boundary mismatch')
-    if record.get('node_cpufeatures_generated_graph_expected_object') != 'sources/android/cpufeatures/cpu-features.o':
-        raise SystemExit(f'Part 34.10.9 {label} generated graph object token mismatch')
-    if record.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
-        raise SystemExit(f'Part 34.10.9 {label} step mismatch')
+        raise SystemExit(f'Part 34.10.10 {label} diagnostic APK/full Alpha boundary mismatch')
+    if record.get('node_cpufeatures_generated_graph_expected_object') != 'deps/zlib/vibecoder-android-cpufeatures/cpu-features.o':
+        raise SystemExit(f'Part 34.10.10 {label} generated graph object token mismatch')
+    if record.get('latest_ci_jcode_apk_sha256') != 'e770b3fd99b9366054e9ece923d39bea223be0f61c77de5fcd315d2b9da39076':
+        raise SystemExit(f'Part 34.10.10 {label} latest Jcode APK evidence mismatch')
+    if record.get('step') != '34.10.10-node-relative-cpufeatures-agent-routing':
+        raise SystemExit(f'Part 34.10.10 {label} step mismatch')
 if deep_audit.get('node_cpufeatures_generated_graph_guard_added') is not True or deep_audit.get('fresh_android_compile') is not False:
     raise SystemExit('Part 34.10.8 historical deep source audit evidence mismatch')
 if graph_repair.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
-    raise SystemExit('Part 34.10.9 graph repair evidence identity mismatch')
-observed_349=graph_repair.get('current_ci_observations',{})
-if observed_349.get('minimal_apk_build_passed') is not True or observed_349.get('jcode_apk_build_passed') is not True:
-    raise SystemExit('Part 34.10.9 positive Minimal/Jcode CI evidence missing')
-if observed_349.get('node_failure_classification') != 'build_graph_integration_invalid':
-    raise SystemExit('Part 34.10.9 Node failure classification evidence mismatch')
-if graph_repair.get('root_cause',{}).get('actual_gyp_make_graph_token') != 'sources/android/cpufeatures/cpu-features.o':
-    raise SystemExit('Part 34.10.9 GYP object-token root cause evidence mismatch')
-if graph_repair.get('post_fix_compile_claim') is not False or graph_repair.get('external_ci_recompile_required') is not True:
-    raise SystemExit('Part 34.10.9 graph repair evidence overclaims external compile proof')
-capability=graph_repair.get('capability_audit',{})
-for key in ('real_chat_interaction_source_wired','model_request_pipeline_source_wired',
-            'agent_jcode_action_controller_source_implemented','explicit_agent_loop_controller_source_implemented'):
-    if capability.get(key) is not True:
-        raise SystemExit(f'Part 34.10.9 source capability evidence missing: {key}')
-if capability.get('coding_agent_send_ui_wired') is not False or capability.get('jcode_diagnostic_apk_is_full_alpha_apk') is not False:
-    raise SystemExit('Part 34.10.9 UI/package capability boundary overclaimed')
+    raise SystemExit('Part 34.10.9 historical graph repair evidence identity mismatch')
+if latest_repair.get('step') != '34.10.10-node-relative-cpufeatures-agent-routing':
+    raise SystemExit('Part 34.10.10 latest repair evidence identity mismatch')
+observed_3410=latest_repair.get('latest_ci_observations',{})
+if observed_3410.get('minimal_apk_build_passed') is not True or observed_3410.get('jcode_apk_build_passed') is not True:
+    raise SystemExit('Part 34.10.10 positive Minimal/Jcode CI evidence missing')
+if observed_3410.get('node_generated_cpufeatures_graph_verifier_passed') is not True:
+    raise SystemExit('Part 34.10.10 Node generated graph positive evidence missing')
+if observed_3410.get('node_target_compile_count_before_failure') != 1121:
+    raise SystemExit('Part 34.10.10 Node target compile-count evidence mismatch')
+node_repair=latest_repair.get('node_repair',{})
+if node_repair.get('expected_generated_object') != 'deps/zlib/vibecoder-android-cpufeatures/cpu-features.o':
+    raise SystemExit('Part 34.10.10 relative cpufeatures object evidence mismatch')
+if node_repair.get('absolute_ndk_object_graph_rejected') is not True:
+    raise SystemExit('Part 34.10.10 absolute NDK object regression guard evidence missing')
+routing=latest_repair.get('agent_action_routing',{})
+for key in ('normal_model_chat_path_preserved','clear_coding_mutation_requests_route_to_single_agent_action_turn',
+            'explanation_style_questions_remain_model_chat','checkpoint_store_attached_to_android_core',
+            'agent_action_stop_cancellation_wired','exact_selected_model_policy_no_fallbacks','response_reports_turn_kind'):
+    if routing.get(key) is not True:
+        raise SystemExit(f'Part 34.10.10 agent-routing evidence missing: {key}')
+if routing.get('explicit_outer_loop_auto_enabled') is not False:
+    raise SystemExit('Part 34.10.10 agent routing overclaims/auto-enables explicit loop')
+if latest_repair.get('post_fix_compile_claim') is not False or latest_repair.get('external_ci_recompile_required') is not True:
+    raise SystemExit('Part 34.10.10 repair evidence overclaims external compile proof')
 
-print('Part 34.10.9 Node GYP graph verifier repair validation PASSED')
+print('Part 34.10.10 Node relative cpufeatures + agent-action routing validation PASSED')

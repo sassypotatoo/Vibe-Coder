@@ -58,6 +58,9 @@ else
   elif grep -Eq 'node_android_toolchain_split_(preflight_failed|log_invalid)' "$EXECUTION_LOG"; then
     CLASSIFICATION="host_target_toolchain_split_invalid"
     DETAIL="node_android_host_target_toolchain_split_invalid"
+  elif grep -Eq "No rule to make target .*sources/android/cpufeatures/cpu-features\.o" "$EXECUTION_LOG"; then
+    CLASSIFICATION="build_graph_source_path_invalid"
+    DETAIL="node_android_cpufeatures_absolute_object_path_invalid"
   elif grep -q 'node_android_make_failed:' "$EXECUTION_LOG"; then
     CLASSIFICATION="compiler_or_linker_failed"
     DETAIL="node_android_make_failed"

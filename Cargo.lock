@@ -1598,6 +1598,7 @@ dependencies = [
  "tokio",
  "uuid",
  "vibecoder-agent-jcode",
+ "vibecoder-checkpoint-local",
  "vibecoder-core",
  "vibecoder-domain",
  "vibecoder-gateway-contract",
@@ -1606,6 +1607,7 @@ dependencies = [
  "vibecoder-process-contract",
  "vibecoder-process-local",
  "vibecoder-runtime-packaging",
+ "vibecoder-routing",
  "vibecoder-workspace-local",
 ]
 

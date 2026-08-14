@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Verify Node's generated GYP graph contains the Android NDK cpufeatures object.
+"""Verify Node's generated GYP graph uses VibeCoder's relative staged cpufeatures object.
 
 The source-level zlib.gyp patch is not enough evidence by itself. Node's Make GYP
 backend converts compilable source paths to object paths in generated *.target.mk
-files, so this verifier checks for cpu-features.o (not cpu-features.c) after GYP
-materializes the graph and before compilation. It also proves the object belongs
-to the Android zlib target and did not leak into any host recipe.
+files. The graph must reference the copy staged under deps/zlib, never an absolute
+NDK source path, and the object must belong only to the Android zlib target.
 """
 from __future__ import annotations
 
@@ -15,9 +14,10 @@ import os
 import re
 from pathlib import Path
 
-SOURCE_TOKEN = "sources/android/cpufeatures/cpu-features.c"
-OBJECT_TOKEN = "sources/android/cpufeatures/cpu-features.o"
-INCLUDE_TOKEN = "sources/android/cpufeatures"
+SOURCE_TOKEN = "deps/zlib/vibecoder-android-cpufeatures/cpu-features.c"
+OBJECT_TOKEN = "deps/zlib/vibecoder-android-cpufeatures/cpu-features.o"
+INCLUDE_TOKEN = "deps/zlib/vibecoder-android-cpufeatures"
+ABSOLUTE_NDK_OBJECT_FRAGMENT = "/sources/android/cpufeatures/cpu-features.o"
 TARGET_RE = re.compile(r"^TARGET\s*:=\s*([^\s#]+)\s*$", re.MULTILINE)
 
 
@@ -70,6 +70,9 @@ def main() -> int:
     matches: list[str] = []
     for path in targets:
         text = read_utf8(path, out)
+        if ABSOLUTE_NDK_OBJECT_FRAGMENT in text and OBJECT_TOKEN not in text:
+            rel = path.relative_to(out).as_posix()
+            fail(f"cpufeatures_absolute_ndk_object_regression:{rel}")
         if OBJECT_TOKEN in text:
             rel = path.relative_to(out).as_posix()
             if generated_target_name(text, rel) != "zlib":
@@ -86,7 +89,7 @@ def main() -> int:
     host_leaks: list[str] = []
     for path in hosts:
         text = read_utf8(path, out)
-        if OBJECT_TOKEN in text or SOURCE_TOKEN in text:
+        if OBJECT_TOKEN in text or SOURCE_TOKEN in text or ABSOLUTE_NDK_OBJECT_FRAGMENT in text:
             host_leaks.append(path.relative_to(out).as_posix())
     if host_leaks:
         fail("cpufeatures_object_leaked_into_host_graph:" + ",".join(host_leaks))
@@ -99,6 +102,7 @@ def main() -> int:
         "object_token": OBJECT_TOKEN,
         "source_token": SOURCE_TOKEN,
         "host_leak": False,
+        "absolute_ndk_object_regression": False,
     }, separators=(",", ":"), sort_keys=True))
     return 0
 
