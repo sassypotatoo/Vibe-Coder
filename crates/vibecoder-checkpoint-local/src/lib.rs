@@ -974,7 +974,7 @@ fn exchange_children(parent: &Path, left: &str, right: &str) -> Result<()> {
             left.as_ptr(),
             parent_fd.as_raw_fd(),
             right.as_ptr(),
-            libc::RENAME_EXCHANGE,
+            libc::RENAME_EXCHANGE as libc::c_uint,
         )
     };
     if result != 0 {

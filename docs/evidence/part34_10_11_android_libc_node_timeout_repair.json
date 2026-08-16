@@ -1,0 +1,33 @@
+{
+  "external_ci_recompile_required": true,
+  "latest_ci_observations": {
+    "android_libc_expected_flags_type": "u32/libc::c_uint",
+    "constant_type_observed": "i32",
+    "jcode_lane_result": "failed_before_apk",
+    "minimal_lane_result": "failed_before_apk",
+    "node_absolute_ndk_object_regression": false,
+    "node_compile_or_link_error_before_cancel": false,
+    "node_generated_cpufeatures_graph_verified": true,
+    "node_job_result": "canceled_at_120_minute_job_timeout",
+    "node_relative_cpufeatures_object_verified": "deps/zlib/vibecoder-android-cpufeatures/cpu-features.o",
+    "shared_rust_error": "E0308 mismatched types in vibecoder-checkpoint-local/src/lib.rs renameat2 flags"
+  },
+  "post_fix_compile_claim": false,
+  "project": "VibeCoder",
+  "repairs": {
+    "agent_action_routing_changed": false,
+    "atomic_exchange_semantics_changed": false,
+    "jcode_cross_build_script_changed": false,
+    "node_build_jobs": 2,
+    "node_build_jobs_changed": false,
+    "node_cpufeatures_source_patch_changed": false,
+    "node_job_timeout_minutes_after": 240,
+    "node_job_timeout_minutes_before": 120,
+    "renameat2_flags": "libc::RENAME_EXCHANGE as libc::c_uint",
+    "vendored_jcode_changed": false
+  },
+  "schema": 1,
+  "source_baseline": "34.10.10-node-relative-cpufeatures-agent-routing",
+  "status": "android_libc_and_node_timeout_recompile_pending",
+  "step": "34.10.11-android-libc-node-timeout-repair"
+}

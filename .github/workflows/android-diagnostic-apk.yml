@@ -264,7 +264,7 @@ jobs:
   node-android-proof-build:
     name: Exact Node 24.19.0 Android cross-compile + APK
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6.0.2
 

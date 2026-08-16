@@ -1109,3 +1109,17 @@ Status: **SOURCE REPAIR + ROUTING WIRED; EXTERNAL RECOMPILE PENDING**
   SDK/NDK are unavailable here. The next GitHub CI run must reconfirm Minimal + Jcode and prove the
   repaired Node build before the full Alpha package can be claimed.
 
+
+### Part 34.10.11 — Android libc ABI + Node timeout repair
+
+Status: **SOURCE REPAIR COMPLETE; EXTERNAL RECOMPILE PENDING**
+
+- [x] Analyzed the first post-routing CI run and isolated the shared Minimal/Jcode Rust failure to
+  `vibecoder-checkpoint-local` Android `renameat2` flags typing (`i32` constant vs `u32` ABI argument).
+- [x] Preserve `RENAME_EXCHANGE` semantics while casting the flag to `libc::c_uint`.
+- [x] Confirm the Node relative cpufeatures generated graph passed and the old absolute-object path did not regress.
+- [x] Confirm no Node compile/link error appeared before the 120-minute GitHub job cancellation.
+- [x] Extend only the Node proof job timeout from 120 to 240 minutes; keep build parallelism at 2.
+- [x] Keep agent-action routing, vendored Jcode, Jcode cross-build script, and Node cpufeatures patch unchanged.
+- [ ] External CI must reconfirm Minimal/Jcode APKs and finish the Node Android build.
+- [ ] Full Alpha APK and physical agent-action round trip remain unproven until those gates pass.

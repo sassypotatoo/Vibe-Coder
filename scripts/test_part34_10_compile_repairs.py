@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json, subprocess, sys, tempfile, tomllib
+import json, re, subprocess, sys, tempfile, tomllib
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -218,3 +218,28 @@ for prompt in (
     if prompt not in ffi: die('android_agent_routing_regression_prompt_missing:'+prompt)
 
 print('Part 34.10 compile-log repair regression PASSED')
+
+# Part 34.10.11 Android libc signature + Node CI runtime budget repair.
+# Android libc::renameat2 expects an unsigned flags argument; keep the atomic exchange
+# semantics while using the libc ABI type rather than a host-dependent integer constant type.
+checkpoint_local=(ROOT/'crates/vibecoder-checkpoint-local/src/lib.rs').read_text()
+if 'libc::RENAME_EXCHANGE as libc::c_uint' not in checkpoint_local:
+    die('android_renameat2_flags_type_cast_missing')
+if re.search(r'libc::renameat2\([\s\S]{0,400}?\n\s*libc::RENAME_EXCHANGE,', checkpoint_local):
+    die('android_renameat2_untyped_flags_regression')
+
+workflow=(ROOT/'.github/workflows/android-diagnostic-apk.yml').read_text()
+node_job=re.search(
+    r'(?ms)^  node-android-proof-build:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:\n|\Z)',
+    workflow,
+)
+if not node_job:
+    die('node_android_ci_job_missing')
+node_body=node_job.group('body')
+match=re.search(r'^    timeout-minutes:\s*(\d+)\s*$', node_body, re.M)
+if not match or int(match.group(1)) < 180:
+    die('node_android_ci_timeout_budget_too_small')
+if 'export VIBECODER_BUILD_JOBS="2"' not in node_body:
+    die('node_android_parallelism_contract_changed')
+
+print('Part 34.10.11 Android libc + Node timeout regression PASSED')

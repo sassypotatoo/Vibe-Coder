@@ -42,6 +42,8 @@ latest_compile_audit=json.loads(read(Path('docs/evidence/part34_10_7_compile_log
 deep_audit=json.loads(read(Path('docs/evidence/part34_10_8_deep_source_audit.json')))
 graph_repair=json.loads(read(Path('docs/evidence/part34_10_9_node_gyp_graph_repair.json')))
 latest_repair=json.loads(read(Path('docs/evidence/part34_10_10_node_relative_cpufeatures_agent_routing.json')))
+latest_compile_repair=json.loads(read(Path('docs/evidence/part34_10_11_android_libc_node_timeout_repair.json')))
+checkpoint_local=read(Path('crates/vibecoder-checkpoint-local/src/lib.rs'))
 project=json.loads(read(Path('PROJECT_STATE.json')))['part34_10_alpha_mobile_ui']
 state=json.loads(read(Path('PART34_STATE.json')))['alpha_mobile_ui']
 
@@ -229,10 +231,10 @@ if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'node_relative_cpufeatures_and_agent_routing_recompile_pending':
-    raise SystemExit('Part 34.10.10 PROJECT_STATE repair status mismatch')
-if project.get('step') != '34.10.10-node-relative-cpufeatures-agent-routing':
-    raise SystemExit('Part 34.10.10 PROJECT_STATE repair step mismatch')
+if project.get('status') != 'android_libc_and_node_timeout_recompile_pending':
+    raise SystemExit('Part 34.10.11 PROJECT_STATE repair status mismatch')
+if project.get('step') != '34.10.11-android-libc-node-timeout-repair':
+    raise SystemExit('Part 34.10.11 PROJECT_STATE repair step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -270,10 +272,10 @@ if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'node_relative_cpufeatures_and_agent_routing_recompile_pending':
-    raise SystemExit('Part 34.10.10 PART34_STATE repair status mismatch')
-if state.get('step') != '34.10.10-node-relative-cpufeatures-agent-routing':
-    raise SystemExit('Part 34.10.10 PART34_STATE repair step mismatch')
+if state.get('status') != 'android_libc_and_node_timeout_recompile_pending':
+    raise SystemExit('Part 34.10.11 PART34_STATE repair status mismatch')
+if state.get('step') != '34.10.11-android-libc-node-timeout-repair':
+    raise SystemExit('Part 34.10.11 PART34_STATE repair step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -353,8 +355,8 @@ for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
         raise SystemExit(f'Part 34.10.10 {label} generated graph object token mismatch')
     if record.get('latest_ci_jcode_apk_sha256') != 'e770b3fd99b9366054e9ece923d39bea223be0f61c77de5fcd315d2b9da39076':
         raise SystemExit(f'Part 34.10.10 {label} latest Jcode APK evidence mismatch')
-    if record.get('step') != '34.10.10-node-relative-cpufeatures-agent-routing':
-        raise SystemExit(f'Part 34.10.10 {label} step mismatch')
+    if record.get('step') != '34.10.11-android-libc-node-timeout-repair':
+        raise SystemExit(f'Part 34.10.11 {label} step mismatch')
 if deep_audit.get('node_cpufeatures_generated_graph_guard_added') is not True or deep_audit.get('fresh_android_compile') is not False:
     raise SystemExit('Part 34.10.8 historical deep source audit evidence mismatch')
 if graph_repair.get('step') != '34.10.9-node-gyp-graph-verifier-repair':
@@ -384,4 +386,31 @@ if routing.get('explicit_outer_loop_auto_enabled') is not False:
 if latest_repair.get('post_fix_compile_claim') is not False or latest_repair.get('external_ci_recompile_required') is not True:
     raise SystemExit('Part 34.10.10 repair evidence overclaims external compile proof')
 
-print('Part 34.10.10 Node relative cpufeatures + agent-action routing validation PASSED')
+# Part 34.10.11: the first post-routing Android compile reached checkpoint-local on Android, where
+# libc::renameat2 takes an unsigned flags argument. Preserve RENAME_EXCHANGE semantics with the ABI type.
+need(checkpoint_local, 'libc::RENAME_EXCHANGE as libc::c_uint', 'Android renameat2 flags type repair')
+if 'timeout-minutes: 240' not in workflow:
+    raise SystemExit('Part 34.10.11 Node CI timeout extension missing')
+for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
+    for key in ('latest_ci_android_renameat2_flags_type_error_observed','android_renameat2_flags_type_fixed',
+                'latest_ci_node_relative_cpufeatures_graph_proven','latest_ci_node_canceled_by_120_minute_timeout'):
+        if record.get(key) is not True:
+            raise SystemExit(f'Part 34.10.11 {label} evidence flag missing: {key}')
+    if record.get('latest_ci_node_compile_error_before_timeout') is not False:
+        raise SystemExit(f'Part 34.10.11 {label} incorrectly claims a Node compiler error before timeout')
+    if record.get('node_ci_timeout_minutes') != 240:
+        raise SystemExit(f'Part 34.10.11 {label} Node timeout budget mismatch')
+if latest_compile_repair.get('step') != '34.10.11-android-libc-node-timeout-repair':
+    raise SystemExit('Part 34.10.11 latest compile repair evidence identity mismatch')
+obs=latest_compile_repair.get('latest_ci_observations',{})
+if obs.get('node_generated_cpufeatures_graph_verified') is not True or obs.get('node_compile_or_link_error_before_cancel') is not False:
+    raise SystemExit('Part 34.10.11 Node timeout evidence mismatch')
+if obs.get('minimal_lane_result') != 'failed_before_apk' or obs.get('jcode_lane_result') != 'failed_before_apk':
+    raise SystemExit('Part 34.10.11 Android lane failure evidence mismatch')
+rep=latest_compile_repair.get('repairs',{})
+if rep.get('renameat2_flags') != 'libc::RENAME_EXCHANGE as libc::c_uint' or rep.get('node_job_timeout_minutes_after') != 240:
+    raise SystemExit('Part 34.10.11 repair evidence mismatch')
+if latest_compile_repair.get('post_fix_compile_claim') is not False or latest_compile_repair.get('external_ci_recompile_required') is not True:
+    raise SystemExit('Part 34.10.11 evidence overclaims post-fix compiler proof')
+
+print('Part 34.10.11 Android libc + Node timeout repair validation PASSED')

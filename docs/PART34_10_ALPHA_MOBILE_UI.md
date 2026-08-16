@@ -252,3 +252,21 @@ or Android SDK/NDK, the modified Android-host Rust has not been recompiled here.
 reconfirmed and Node must pass the new relative-source build in external CI before a full Alpha APK or
 physical coding-action round trip is claimed.
 
+
+## Part 34.10.11 — Android `renameat2` ABI repair + Node CI timeout extension
+
+The first external compile after agent-action routing exposed one shared Android Rust compile error in
+`vibecoder-checkpoint-local`: Android libc declares the `renameat2` flags argument as unsigned, while
+`libc::RENAME_EXCHANGE` is typed as `i32` in the resolved libc crate. The call now casts only that
+constant to `libc::c_uint`; atomic exchange semantics and the fail-closed rollback design are unchanged.
+Both Minimal and Jcode lanes failed before APK packaging on this same workspace error, so this is not a
+Jcode payload regression.
+
+The Node lane independently proved the Part 34.10.10 relative cpufeatures graph: the expected relative
+`cpu-features.o` was present, the absolute-NDK-object regression was absent, and no Node compiler or
+linker error appeared before GitHub canceled the job at its 120-minute job timeout. The Node proof job
+budget is therefore increased to 240 minutes while retaining `VIBECODER_BUILD_JOBS=2`; Node source,
+cpufeatures staging, host/target split, and Jcode paths are otherwise unchanged.
+
+This checkpoint does not claim post-fix APK or Node-binary success. External CI must reconfirm the
+Minimal/Jcode lanes and allow the Node compile to finish before the full Alpha package can run.
