@@ -301,3 +301,29 @@ No agent-action routing, Minimal/Jcode build path, vendored Jcode source, Node c
 Node timeout budget is changed in this repair. The current environment still cannot perform the real
 Node Android cross-build, so post-fix Node binary/full Alpha success remains an external CI evidence
 gate rather than a source-level claim.
+
+## Part 34.10.13 — idempotent clean-host sanitizer repair
+
+The next external CI run proved the Part 34.10.12 configure-time architecture repair before any
+expensive Node compilation: `host_arch=x64`, `target_arch=arm64`, the separate host toolset was
+enabled, the generated V8 host graph selected only the x64 push-register object, and the repaired
+relative cpufeatures graph remained verified. The Minimal and Jcode APK lanes also built and passed
+APK verification again.
+
+Node then failed **before compilation** in VibeCoder's own generated-host-makefile sanitizer. That
+sanitzer historically required at least one `-mbranch-protection=standard` replacement because the
+older misdetected ARM64 host graph leaked that target-only flag into `*.host.mk`. Once host
+architecture detection was fixed, the x86_64 host graph was already clean, so zero replacements are
+a valid state rather than evidence of a broken graph.
+
+The sanitizer is now idempotent. It still removes only the one evidence-proven Android-only flag when
+present, then rescans every host recipe and fails if that flag remains. If no host recipe contains it,
+the sanitizer reports `sanitization_mode=already_clean` and succeeds without mutating anything. Every
+`*.target.mk` is still SHA-256 guarded before/after and must remain byte-identical, so the no-op path
+does not weaken Android target flags. Regression fixtures cover both the removal path and the clean
+no-op path.
+
+No Node source, cpufeatures patch, host-architecture repair, Minimal/Jcode build path, agent-action
+routing, timeout budget, or vendored Jcode source is changed. A post-repair Node binary/full Alpha APK
+remains an external CI evidence gate.
+

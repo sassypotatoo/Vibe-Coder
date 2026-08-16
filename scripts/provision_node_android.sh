@@ -133,11 +133,11 @@ python3 "$ROOT/scripts/verify_node_android_cpufeatures_integration.py" "$WORK/ou
   | tee -a "$CONFIGURE_LOG" \
   || fail "node_android_cpufeatures_generated_graph_invalid:log=${CONFIGURE_LOG}"
 
-# The pinned build evidence proved one Android AArch64 target flag leaks into generated obj.host
-# recipes: -mbranch-protection=standard. Ubuntu's host g++ rejects that target-only option. Sanitize
-# only generated *.host.mk recipes, after GYP has materialized them and before compilation. The
-# sanitizer independently hashes every *.target.mk before/after so Android target flags cannot be
-# weakened by this host-only repair.
+# Earlier pinned build evidence proved one Android AArch64 target flag could leak into generated
+# obj.host recipes: -mbranch-protection=standard. With the configure-time host-architecture repair
+# the x86_64 host graph can already be clean, so this sanitizer is intentionally idempotent: remove
+# the proven flag if present, otherwise verify a clean no-op. It hashes every *.target.mk before/after
+# so Android target flags cannot be weakened by this host-only repair.
 python3 "$ROOT/scripts/sanitize_node_android_host_makefiles.py" "$WORK/out" \
   | tee -a "$CONFIGURE_LOG" \
   || fail "node_android_host_makefile_sanitize_failed:log=${CONFIGURE_LOG}"

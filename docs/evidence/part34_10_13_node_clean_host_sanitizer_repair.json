@@ -1,0 +1,52 @@
+{
+  "external_ci_recompile_required": true,
+  "full_alpha_apk_compiled": false,
+  "latest_ci_observations": {
+    "commit": "0499266c52585074495104fb8b2567cb65dc7fed",
+    "jcode_apk_artifact_id": 9268913102,
+    "jcode_apk_sha256": "839a0628000e989472df98bd2058e906f76a5dd571685688480e9358740dda5b",
+    "jcode_lane_result": "passed",
+    "minimal_apk_artifact_id": 9268660144,
+    "minimal_apk_sha256": "e6439a33cbafde7314075d9e3be3277338b1c4d403c94f5d9797f708777be3bf",
+    "minimal_lane_result": "passed",
+    "node_compile_started": false,
+    "node_configure_host_arch": "x64",
+    "node_configure_output_verified": true,
+    "node_configure_target_arch": "arm64",
+    "node_failure_artifact_id": 9268617334,
+    "node_failure_classification": "host_target_flag_sanitize_failed",
+    "node_failure_detail": "proven_host_target_flag_not_found",
+    "node_failure_identity": "sanitizer_rejected_already_clean_host_graph",
+    "node_generated_cpufeatures_graph_verified": true,
+    "node_generated_host_arch_graph_verified": true,
+    "node_generated_host_push_register_arches": [
+      "x64"
+    ],
+    "node_separate_host_toolset": true,
+    "run_id": 31966423971
+  },
+  "post_fix_compile_claim": false,
+  "repair": {
+    "agent_action_routing_changed": false,
+    "clean_host_graph_is_valid_noop": true,
+    "jcode_build_script_changed": false,
+    "minimal_build_lane_changed": false,
+    "node_cpufeatures_patch_changed": false,
+    "node_host_arch_repair_changed": false,
+    "node_source_changed": false,
+    "node_timeout_minutes_changed": false,
+    "post_scan_requires_proven_flag_absent_from_all_host_makefiles": true,
+    "proven_flag_removed_when_present": true,
+    "sanitization_modes": [
+      "removed_proven_flags",
+      "already_clean"
+    ],
+    "sanitizer_is_idempotent": true,
+    "target_makefiles_hashed_before_after": true,
+    "target_makefiles_must_remain_byte_identical": true,
+    "vendored_jcode_changed": false
+  },
+  "source_checkpoint": "Part 34.10.12",
+  "status": "node_clean_host_sanitizer_recompile_pending",
+  "step": "34.10.13-node-clean-host-sanitizer-repair"
+}

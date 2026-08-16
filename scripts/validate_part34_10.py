@@ -46,6 +46,7 @@ graph_repair=json.loads(read(Path('docs/evidence/part34_10_9_node_gyp_graph_repa
 latest_repair=json.loads(read(Path('docs/evidence/part34_10_10_node_relative_cpufeatures_agent_routing.json')))
 latest_compile_repair=json.loads(read(Path('docs/evidence/part34_10_11_android_libc_node_timeout_repair.json')))
 latest_host_arch_repair=json.loads(read(Path('docs/evidence/part34_10_12_node_configure_host_arch_repair.json')))
+latest_sanitizer_repair=json.loads(read(Path('docs/evidence/part34_10_13_node_clean_host_sanitizer_repair.json')))
 checkpoint_local=read(Path('crates/vibecoder-checkpoint-local/src/lib.rs'))
 project=json.loads(read(Path('PROJECT_STATE.json')))['part34_10_alpha_mobile_ui']
 state=json.loads(read(Path('PART34_STATE.json')))['alpha_mobile_ui']
@@ -234,10 +235,10 @@ if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'node_configure_host_arch_recompile_pending':
-    raise SystemExit('Part 34.10.12 PROJECT_STATE repair status mismatch')
-if project.get('step') != '34.10.12-node-configure-host-arch-repair':
-    raise SystemExit('Part 34.10.12 PROJECT_STATE repair step mismatch')
+if project.get('status') != 'node_clean_host_sanitizer_recompile_pending':
+    raise SystemExit('Part 34.10.13 PROJECT_STATE repair status mismatch')
+if project.get('step') != '34.10.13-node-clean-host-sanitizer-repair':
+    raise SystemExit('Part 34.10.13 PROJECT_STATE repair step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -275,10 +276,10 @@ if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'node_configure_host_arch_recompile_pending':
-    raise SystemExit('Part 34.10.12 PART34_STATE repair status mismatch')
-if state.get('step') != '34.10.12-node-configure-host-arch-repair':
-    raise SystemExit('Part 34.10.12 PART34_STATE repair step mismatch')
+if state.get('status') != 'node_clean_host_sanitizer_recompile_pending':
+    raise SystemExit('Part 34.10.13 PART34_STATE repair status mismatch')
+if state.get('step') != '34.10.13-node-clean-host-sanitizer-repair':
+    raise SystemExit('Part 34.10.13 PART34_STATE repair step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -307,9 +308,9 @@ for token in ('host_compiler_must_not_be_from_android_ndk',
               '--require-observed'):
     need(node_split, token, 'Node Android toolchain-split verifier')
 need(compile_repairs, 'old_android_compiler_for_obj_host_not_rejected', 'compile-log repair regression')
-for token in ('-mbranch-protection=standard','proven_host_target_flag_not_found','target_makefiles_modified',
-              'node_android_host_makefile_sanitize'):
-    need(node_sanitize, token, 'Node Android proven host-only flag sanitizer')
+for token in ('-mbranch-protection=standard','target_makefiles_modified',
+              'node_android_host_makefile_sanitize','sanitization_mode','already_clean','removed_proven_flags'):
+    need(node_sanitize, token, 'Node Android idempotent proven host-only flag sanitizer')
 for token in ('ProcessRuntime, ProcessTermination','self.process_runtime.cancel(process_id)'):
     need(omni_service, token, 'OmniRoute ProcessRuntime compile repair')
 if 'last_profile' in omni_service:
@@ -337,7 +338,7 @@ for token in ('scripts/sanitize_node_android_host_makefiles.py',
     need(workflow, token, 'deep-audit CI regression')
 
 for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
-    # Long-lived capability/repair flags from 34.10.8 -> 34.10.12.
+    # Long-lived capability/repair flags from 34.10.8 -> 34.10.13.
     for key in ('node_cpufeatures_generated_graph_guard_added','deep_source_compile_contract_audit_passed',
                 'node_cpufeatures_generated_graph_false_negative_repaired',
                 'latest_ci_minimal_apk_proven','latest_ci_jcode_apk_proven',
@@ -351,45 +352,51 @@ for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
                 'agent_action_route_exact_selected_model_only',
                 'android_renameat2_flags_type_fixed',
                 'latest_ci_minimal_post_routing_compile_passed','latest_ci_jcode_post_routing_compile_passed',
-                'latest_ci_node_relative_cpufeatures_graph_proven','latest_ci_node_compile_error_before_timeout',
-                'latest_ci_node_host_arch_misdetected_as_arm64',
+                'latest_ci_node_relative_cpufeatures_graph_proven',
                 'node_configure_host_toolchain_bound_before_configure',
                 'node_configure_separate_host_toolset_required',
-                'node_generated_host_arch_graph_guard_added','node_generated_arm64_push_register_host_rejected'):
+                'node_generated_host_arch_graph_guard_added','node_generated_arm64_push_register_host_rejected',
+                'latest_ci_node_configure_host_arch_verified','latest_ci_node_host_arch_graph_verified',
+                'latest_ci_node_cpufeatures_graph_verified','latest_ci_node_sanitizer_already_clean_rejected',
+                'node_host_flag_sanitizer_clean_noop_allowed','node_host_flag_sanitizer_idempotent'):
         if record.get(key) is not True:
-            raise SystemExit(f'Part 34.10.12 {label} repair/evidence flag missing: {key}')
+            raise SystemExit(f'Part 34.10.13 {label} repair/evidence flag missing: {key}')
     if record.get('agent_action_outer_loop_auto_enabled') is not False:
-        raise SystemExit(f'Part 34.10.12 {label} must not auto-enable explicit outer loop')
+        raise SystemExit(f'Part 34.10.13 {label} must not auto-enable explicit outer loop')
     if record.get('jcode_diagnostic_apk_full_chat_expected') is not False:
-        raise SystemExit(f'Part 34.10.12 {label} diagnostic APK/full Alpha boundary mismatch')
+        raise SystemExit(f'Part 34.10.13 {label} diagnostic APK/full Alpha boundary mismatch')
     if record.get('node_cpufeatures_generated_graph_expected_object') != 'deps/zlib/vibecoder-android-cpufeatures/cpu-features.o':
-        raise SystemExit(f'Part 34.10.12 {label} generated cpufeatures object token mismatch')
+        raise SystemExit(f'Part 34.10.13 {label} generated cpufeatures object token mismatch')
+    if record.get('latest_ci_run_id') != 31966423971 or record.get('latest_ci_commit') != '0499266c52585074495104fb8b2567cb65dc7fed':
+        raise SystemExit(f'Part 34.10.13 {label} latest CI identity mismatch')
     if record.get('latest_ci_minimal_apk_sha256') != 'e6439a33cbafde7314075d9e3be3277338b1c4d403c94f5d9797f708777be3bf':
-        raise SystemExit(f'Part 34.10.12 {label} latest Minimal APK evidence mismatch')
-    if record.get('latest_ci_jcode_apk_sha256') != 'a7f53a8c8f3b4fb60ecca5b7d6e7ce8402134a49bb0b1af1ae67cc1adfa6912c':
-        raise SystemExit(f'Part 34.10.12 {label} latest Jcode APK evidence mismatch')
-    if record.get('latest_ci_minimal_apk_artifact_id') != 9265481016 or record.get('latest_ci_jcode_apk_artifact_id') != 9265730756:
-        raise SystemExit(f'Part 34.10.12 {label} latest APK artifact identity mismatch')
-    if record.get('latest_ci_node_failure') != 'x86_64_host_gxx_received_arm64_push_register_asm':
-        raise SystemExit(f'Part 34.10.12 {label} latest Node failure identity mismatch')
-    if record.get('latest_ci_node_host_compiler') != '/usr/bin/g++':
-        raise SystemExit(f'Part 34.10.12 {label} latest Node host compiler mismatch')
-    if record.get('latest_ci_node_host_push_register_source') != 'deps/v8/src/heap/base/asm/arm64/push_registers_asm.cc':
-        raise SystemExit(f'Part 34.10.12 {label} latest Node bad host source mismatch')
-    if record.get('latest_ci_node_host_compile_count_before_failure') != 1795 or record.get('latest_ci_node_target_compile_count_before_failure') != 2125:
-        raise SystemExit(f'Part 34.10.12 {label} latest Node compile-count evidence mismatch')
+        raise SystemExit(f'Part 34.10.13 {label} latest Minimal APK evidence mismatch')
+    if record.get('latest_ci_jcode_apk_sha256') != '839a0628000e989472df98bd2058e906f76a5dd571685688480e9358740dda5b':
+        raise SystemExit(f'Part 34.10.13 {label} latest Jcode APK evidence mismatch')
+    if record.get('latest_ci_minimal_apk_artifact_id') != 9268660144 or record.get('latest_ci_jcode_apk_artifact_id') != 9268913102:
+        raise SystemExit(f'Part 34.10.13 {label} latest APK artifact identity mismatch')
+    if record.get('latest_ci_node_failure_artifact_id') != 9268617334:
+        raise SystemExit(f'Part 34.10.13 {label} latest Node failure artifact mismatch')
+    if record.get('latest_ci_node_failure') != 'sanitizer_rejected_already_clean_host_graph':
+        raise SystemExit(f'Part 34.10.13 {label} latest Node failure identity mismatch')
+    if record.get('latest_ci_node_compile_started') is not False or record.get('latest_ci_node_compile_error_before_timeout') is not False:
+        raise SystemExit(f'Part 34.10.13 {label} Node must have failed before compile')
+    if record.get('latest_ci_node_host_arch_misdetected_as_arm64') is not False:
+        raise SystemExit(f'Part 34.10.13 {label} repaired host architecture regressed')
+    if record.get('latest_ci_node_host_compile_count_before_failure') != 0 or record.get('latest_ci_node_target_compile_count_before_failure') != 0:
+        raise SystemExit(f'Part 34.10.13 {label} precompile failure count mismatch')
     if record.get('node_configure_host_arch_expected') != 'x64' or record.get('node_configure_target_arch_expected') != 'arm64':
-        raise SystemExit(f'Part 34.10.12 {label} configure arch contract mismatch')
+        raise SystemExit(f'Part 34.10.13 {label} configure arch contract mismatch')
     if record.get('node_generated_host_push_register_expected') != 'deps/v8/src/heap/base/asm/x64/push_registers_asm.o':
-        raise SystemExit(f'Part 34.10.12 {label} generated host graph object contract mismatch')
+        raise SystemExit(f'Part 34.10.13 {label} generated host graph object contract mismatch')
     if record.get('node_ci_timeout_minutes') != 240:
-        raise SystemExit(f'Part 34.10.12 {label} Node timeout budget mismatch')
-    if record.get('status') != 'node_configure_host_arch_recompile_pending':
-        raise SystemExit(f'Part 34.10.12 {label} status mismatch')
-    if record.get('step') != '34.10.12-node-configure-host-arch-repair':
-        raise SystemExit(f'Part 34.10.12 {label} step mismatch')
+        raise SystemExit(f'Part 34.10.13 {label} Node timeout budget mismatch')
+    if record.get('status') != 'node_clean_host_sanitizer_recompile_pending':
+        raise SystemExit(f'Part 34.10.13 {label} status mismatch')
+    if record.get('step') != '34.10.13-node-clean-host-sanitizer-repair':
+        raise SystemExit(f'Part 34.10.13 {label} step mismatch')
     if record.get('fresh_android_compile') is not False or record.get('full_alpha_apk_compiled') is not False:
-        raise SystemExit(f'Part 34.10.12 {label} overclaims post-repair compile/full Alpha proof')
+        raise SystemExit(f'Part 34.10.13 {label} overclaims post-repair compile/full Alpha proof')
 
 # Historical evidence remains immutable and is validated independently of the current state.
 if deep_audit.get('node_cpufeatures_generated_graph_guard_added') is not True or deep_audit.get('fresh_android_compile') is not False:
@@ -484,4 +491,43 @@ for key in ('agent_action_routing_changed','jcode_build_script_changed','minimal
 if latest_host_arch_repair.get('post_fix_compile_claim') is not False or latest_host_arch_repair.get('external_ci_recompile_required') is not True:
     raise SystemExit('Part 34.10.12 evidence overclaims post-fix compiler proof')
 
-print('Part 34.10.12 Node configure host-arch repair validation PASSED')
+# Part 34.10.13: after the host-architecture repair, an already-clean host graph is valid.
+# The sanitizer must remain narrow, idempotent, and target-byte-preserving.
+for token in ('sanitization_mode', 'already_clean', 'removed_proven_flags'):
+    need(node_sanitize, token, 'Node clean-host sanitizer repair')
+for token in ('host_flag_sanitizer_clean_graph_rejected', 'host_flag_sanitizer_clean_graph_evidence_invalid'):
+    need(compile_repairs, token, 'Node clean-host sanitizer regression coverage')
+if latest_sanitizer_repair.get('step') != '34.10.13-node-clean-host-sanitizer-repair' or latest_sanitizer_repair.get('status') != 'node_clean_host_sanitizer_recompile_pending':
+    raise SystemExit('Part 34.10.13 repair evidence identity mismatch')
+obs13=latest_sanitizer_repair.get('latest_ci_observations',{})
+if obs13.get('run_id') != 31966423971 or obs13.get('commit') != '0499266c52585074495104fb8b2567cb65dc7fed':
+    raise SystemExit('Part 34.10.13 latest CI identity mismatch')
+if obs13.get('minimal_lane_result') != 'passed' or obs13.get('jcode_lane_result') != 'passed':
+    raise SystemExit('Part 34.10.13 positive Minimal/Jcode CI evidence missing')
+if obs13.get('node_configure_host_arch') != 'x64' or obs13.get('node_configure_target_arch') != 'arm64' or obs13.get('node_separate_host_toolset') is not True:
+    raise SystemExit('Part 34.10.13 repaired configure architecture evidence mismatch')
+if obs13.get('node_generated_host_arch_graph_verified') is not True or obs13.get('node_generated_host_push_register_arches') != ['x64']:
+    raise SystemExit('Part 34.10.13 generated host graph evidence mismatch')
+if obs13.get('node_generated_cpufeatures_graph_verified') is not True:
+    raise SystemExit('Part 34.10.13 cpufeatures graph regression evidence missing')
+if obs13.get('node_compile_started') is not False or obs13.get('node_failure_classification') != 'host_target_flag_sanitize_failed':
+    raise SystemExit('Part 34.10.13 Node failure phase/classification mismatch')
+if obs13.get('node_failure_detail') != 'proven_host_target_flag_not_found':
+    raise SystemExit('Part 34.10.13 sanitizer false-failure detail mismatch')
+rep13=latest_sanitizer_repair.get('repair',{})
+for key in ('sanitizer_is_idempotent','clean_host_graph_is_valid_noop','proven_flag_removed_when_present',
+            'post_scan_requires_proven_flag_absent_from_all_host_makefiles','target_makefiles_hashed_before_after',
+            'target_makefiles_must_remain_byte_identical'):
+    if rep13.get(key) is not True:
+        raise SystemExit(f'Part 34.10.13 repair evidence missing: {key}')
+if rep13.get('sanitization_modes') != ['removed_proven_flags','already_clean']:
+    raise SystemExit('Part 34.10.13 sanitizer mode evidence mismatch')
+for key in ('node_source_changed','node_cpufeatures_patch_changed','node_host_arch_repair_changed',
+            'jcode_build_script_changed','minimal_build_lane_changed','agent_action_routing_changed',
+            'vendored_jcode_changed','node_timeout_minutes_changed'):
+    if rep13.get(key) is not False:
+        raise SystemExit(f'Part 34.10.13 protected change boundary mismatch: {key}')
+if latest_sanitizer_repair.get('post_fix_compile_claim') is not False or latest_sanitizer_repair.get('external_ci_recompile_required') is not True:
+    raise SystemExit('Part 34.10.13 evidence overclaims post-fix compiler proof')
+
+print('Part 34.10.13 Node clean-host sanitizer repair validation PASSED')

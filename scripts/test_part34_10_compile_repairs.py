@@ -102,13 +102,23 @@ with tempfile.TemporaryDirectory(prefix='vibecoder-node-host-flags-') as td:
     payload=json.loads(result.stdout.strip())
     if payload.get('node_android_host_makefile_sanitize') != 'VERIFIED' or payload.get('flag_replacements') != 1:
         die('host_flag_sanitizer_evidence_invalid')
-with tempfile.TemporaryDirectory(prefix='vibecoder-node-host-flags-missing-') as td:
+with tempfile.TemporaryDirectory(prefix='vibecoder-node-host-flags-clean-') as td:
     out=Path(td)/'out'; out.mkdir()
-    (out/'node_js2c.host.mk').write_text('CFLAGS_CC := -Wall -O3\n', encoding='utf-8')
-    (out/'node.target.mk').write_text('CFLAGS_CC := -Wall -O3\n', encoding='utf-8')
+    host=out/'node_js2c.host.mk'; target=out/'node.target.mk'
+    host_original='CFLAGS_CC := -Wall -O3\n'
+    target_original='CFLAGS_CC := -Wall -mbranch-protection=standard -O3\n'
+    host.write_text(host_original, encoding='utf-8')
+    target.write_text(target_original, encoding='utf-8')
     result=subprocess.run([sys.executable,str(sanitize),str(out)], text=True, capture_output=True)
-    if result.returncode == 0 or 'proven_host_target_flag_not_found' not in result.stderr:
-        die('host_flag_sanitizer_missing_flag_not_fail_closed')
+    if result.returncode:
+        die('host_flag_sanitizer_clean_graph_rejected:'+result.stderr.strip())
+    if host.read_text(encoding='utf-8') != host_original:
+        die('host_flag_sanitizer_clean_graph_mutated')
+    if target.read_text(encoding='utf-8') != target_original:
+        die('target_makefile_modified_by_clean_host_sanitizer')
+    payload=json.loads(result.stdout.strip())
+    if payload.get('node_android_host_makefile_sanitize') != 'VERIFIED' or payload.get('flag_replacements') != 0 or payload.get('sanitization_mode') != 'already_clean':
+        die('host_flag_sanitizer_clean_graph_evidence_invalid')
 if 'sanitize_node_android_host_makefiles.py' not in provision: die('node_host_flag_sanitizer_not_invoked')
 if provision.index(generate) > provision.index('sanitize_node_android_host_makefiles.py'): die('node_host_flag_sanitizer_runs_before_gyp_makefiles_exist')
 if provision.index('sanitize_node_android_host_makefiles.py') > provision.index(preflight): die('node_toolchain_preflight_runs_before_host_flag_sanitizer')
@@ -285,4 +295,4 @@ if 'export VIBECODER_BUILD_JOBS="2"' not in node_body:
 
 print('Part 34.10.11 Android libc + Node timeout regression PASSED')
 
-print('Part 34.10.12 Node configure host-arch regression PASSED')
+print('Part 34.10.13 Node clean-host sanitizer regression PASSED')

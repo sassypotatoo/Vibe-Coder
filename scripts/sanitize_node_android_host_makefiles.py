@@ -81,8 +81,10 @@ def main() -> int:
             replacements += file_replacements
             touched.append(path.name)
 
-    if replacements <= 0:
-        fail("proven_host_target_flag_not_found")
+    # A correctly separated x86_64 host graph may already be clean. Historically this flag leaked
+    # when configure misdetected the host as ARM64; after the host-architecture repair, zero
+    # replacements is a valid no-op, not a failure. The authority is the post-scan below: no proven
+    # Android-only flag may remain in any host recipe, and target recipes must be byte-identical.
 
     # Re-scan rather than trusting the replacement loop.
     for path in host_files:
@@ -103,6 +105,7 @@ def main() -> int:
                 "target_makefiles_guarded": len(target_files),
                 "host_makefiles_touched": len(touched),
                 "flag_replacements": replacements,
+                "sanitization_mode": "removed_proven_flags" if replacements else "already_clean",
                 "removed_flags": list(PROVEN_HOST_INCOMPATIBLE_FLAGS),
             },
             separators=(",", ":"),
