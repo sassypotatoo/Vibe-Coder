@@ -1,0 +1,52 @@
+{
+  "external_ci_recompile_required": true,
+  "latest_ci_observations": {
+    "jcode_android_linker_compatible": true,
+    "jcode_apk_sha256": "a7f53a8c8f3b4fb60ecca5b7d6e7ce8402134a49bb0b1af1ae67cc1adfa6912c",
+    "jcode_artifact_id": 9265730756,
+    "jcode_lane_result": "passed",
+    "jcode_page16": true,
+    "minimal_apk_sha256": "e6439a33cbafde7314075d9e3be3277338b1c4d403c94f5d9797f708777be3bf",
+    "minimal_artifact_id": 9265481016,
+    "minimal_lane_result": "passed",
+    "node_failure_classification": "compiler_or_linker_failed",
+    "node_first_real_error": "x86_64 assembler rejected ARM64 stp/blr/ldp instructions",
+    "node_generated_cpufeatures_graph_verified": true,
+    "node_host_compile_count_before_failure": 1795,
+    "node_host_compiler": "/usr/bin/g++",
+    "node_host_object": "obj.host/v8_base_without_compiler/deps/v8/src/heap/base/asm/arm64/push_registers_asm.o",
+    "node_host_source": "deps/v8/src/heap/base/asm/arm64/push_registers_asm.cc",
+    "node_make_status": 2,
+    "node_target_compile_count_before_failure": 2125,
+    "node_timed_out": false
+  },
+  "post_fix_compile_claim": false,
+  "project": "VibeCoder",
+  "repairs": {
+    "agent_action_routing_changed": false,
+    "arm64_push_register_host_graph_rejected": true,
+    "configure_output_requires_host_arch_x64": true,
+    "configure_output_requires_separate_host_toolset": true,
+    "configure_output_requires_target_arch_arm64": true,
+    "configure_time_host_ar_bound": true,
+    "configure_time_host_cc_bound": true,
+    "configure_time_host_cxx_bound": true,
+    "expected_host_push_register_object": "deps/v8/src/heap/base/asm/x64/push_registers_asm.o",
+    "generated_v8_host_graph_guard_added": true,
+    "jcode_build_script_changed": false,
+    "minimal_build_lane_changed": false,
+    "node_cpufeatures_patch_changed": false,
+    "node_timeout_minutes_changed": false,
+    "vendored_jcode_changed": false
+  },
+  "root_cause": {
+    "android_configure_sets_CC_to_target_ndk_compiler": true,
+    "node_configure_host_arch_detection_uses_CC_host": true,
+    "result": "config.gypi host_arch was generated from the ARM64 target compiler, so V8 selected ARM64 push-register asm for an obj.host target compiled by x86_64 g++",
+    "vibecoder_previously_bound_CC_host_only_at_make_time": true
+  },
+  "schema": 1,
+  "source_baseline": "34.10.11-android-libc-node-timeout-repair",
+  "status": "node_configure_host_arch_recompile_pending",
+  "step": "34.10.12-node-configure-host-arch-repair"
+}

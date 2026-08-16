@@ -1123,3 +1123,18 @@ Status: **SOURCE REPAIR COMPLETE; EXTERNAL RECOMPILE PENDING**
 - [x] Keep agent-action routing, vendored Jcode, Jcode cross-build script, and Node cpufeatures patch unchanged.
 - [ ] External CI must reconfirm Minimal/Jcode APKs and finish the Node Android build.
 - [ ] Full Alpha APK and physical agent-action round trip remain unproven until those gates pass.
+
+### Part 34.10.12 — Node configure-time host architecture repair
+
+Status: **SOURCE REPAIR COMPLETE; EXTERNAL NODE RECOMPILE PENDING**
+
+- [x] Latest external CI reconfirmed the Minimal diagnostic APK and Jcode diagnostic APK build and APK verification paths after the Android `renameat2` ABI repair.
+- [x] Confirmed the Node relative cpufeatures generated graph remained valid; the old absolute NDK object-path failure did not return.
+- [x] Isolated the first real Node failure after ~2 hours: `/usr/bin/g++` compiled an `obj.host` V8 target from ARM64 `push_registers_asm.cc`, and the x86_64 assembler rejected ARM64 instructions.
+- [x] Bind `CC_host`, `CXX_host`, and `AR_host` before Node `android-configure` so configure/GYP host-architecture detection sees the real x64 host toolchain.
+- [x] Require generated `config.gypi` to report `host_arch=x64`, `target_arch=arm64`, and `want_separate_host_toolset=1` before proceeding.
+- [x] Add a generated V8 host-graph guard that requires the x64 push-register object and rejects ARM64 push-register source/object leakage before the expensive compile starts.
+- [x] Add synthetic negative regressions for configure-time ARM64 host misdetection and generated ARM64 host graph selection.
+- [x] Keep agent-action routing, vendored Jcode, Jcode/Minimal build scripts, Node cpufeatures patch, and the 240-minute Node budget unchanged.
+- [ ] Node 24.19.0 post-fix Android binary proof remains pending the next external CI run.
+- [ ] Full Alpha APK and physical coding-action acceptance remain pending Node success.

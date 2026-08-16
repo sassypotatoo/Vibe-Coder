@@ -49,6 +49,9 @@ else
   elif grep -Eq 'node_android_generated_makefile_(failed|missing)' "$EXECUTION_LOG"; then
     CLASSIFICATION="build_graph_generation_failed"
     DETAIL="node_android_generated_makefile_failed"
+  elif grep -q 'node_android_host_arch_graph_invalid' "$EXECUTION_LOG"; then
+    CLASSIFICATION="host_arch_graph_invalid"
+    DETAIL="node_android_host_arch_graph_invalid"
   elif grep -q 'node_android_cpufeatures_generated_graph_invalid' "$EXECUTION_LOG"; then
     CLASSIFICATION="build_graph_integration_invalid"
     DETAIL="node_android_cpufeatures_generated_graph_invalid"

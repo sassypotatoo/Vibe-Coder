@@ -94,7 +94,8 @@ python3 "$ROOT/scripts/patch_node_android_zlib_cpufeatures.py" "$WORK" "$NDK_CPU
 # build, not a readiness claim. Keep stdout/stderr so the first real compiler/linker failure can be
 # diagnosed instead of reduced to a generic CI red X.
 set +e
-./android-configure "$NDK_ROOT" "$API" arm64 2>&1 | tee -a "$CONFIGURE_LOG"
+CC_host="$HOST_CC" CXX_host="$HOST_CXX" AR_host="$HOST_AR" \
+  ./android-configure "$NDK_ROOT" "$API" arm64 2>&1 | tee -a "$CONFIGURE_LOG"
 CONFIGURE_STATUS=${PIPESTATUS[0]}
 set -e
 if (( CONFIGURE_STATUS != 0 )); then
@@ -122,6 +123,12 @@ fi
 # Source-level GYP patching is not proof that GYP accepted the integration. Before spending the
 # expensive compile, inspect the generated graph: exactly one Android zlib target must contain the
 # NDK cpu-features.c source, and no host recipe may contain it.
+# configure.py detects host_arch from CC_host. Verify the generated V8 host graph before the
+# expensive build so an x86_64 host compiler can never again be handed ARM64 push-register asm.
+python3 "$ROOT/scripts/verify_node_android_host_arch_graph.py" "$WORK/out" \
+  | tee -a "$CONFIGURE_LOG" \
+  || fail "node_android_host_arch_graph_invalid:log=${CONFIGURE_LOG}"
+
 python3 "$ROOT/scripts/verify_node_android_cpufeatures_integration.py" "$WORK/out" \
   | tee -a "$CONFIGURE_LOG" \
   || fail "node_android_cpufeatures_generated_graph_invalid:log=${CONFIGURE_LOG}"

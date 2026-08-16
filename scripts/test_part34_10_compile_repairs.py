@@ -24,6 +24,10 @@ if generate not in provision: die('node_generated_makefile_materialization_missi
 if preflight not in provision: die('node_toolchain_split_preflight_missing')
 if provision.index(generate) > provision.index(preflight): die('node_toolchain_preflight_runs_before_generated_makefile_exists')
 if 'make -j"$JOBS" V=1' not in provision: die('node_verbose_build_required_for_toolchain_evidence_missing')
+configure_bind='CC_host="$HOST_CC" CXX_host="$HOST_CXX" AR_host="$HOST_AR"'
+if configure_bind not in provision: die('node_configure_time_host_toolchain_binding_missing')
+if provision.index(configure_bind) > provision.index('./android-configure "$NDK_ROOT" "$API" arm64'):
+    die('node_configure_time_host_toolchain_binding_order_invalid')
 if 'node_android_generated_makefile_failed:' not in provision: die('node_generated_makefile_failure_not_fail_closed')
 wrapper=(ROOT/'scripts/part34_node_execute_cross_build.sh').read_text()
 if 'build_graph_generation_failed' not in wrapper or 'node_android_generated_makefile_(failed|missing)' not in wrapper:
@@ -42,6 +46,43 @@ with tempfile.TemporaryDirectory() as td:
     good=d/'good.log'; good.write_text(f"{host/'g++'} -o /x/obj.host/v8/a.o a.cc -c\n{ndk/'bin'/'aarch64-linux-android29-clang++'} -o /x/obj.target/v8/b.o b.cc -c\n")
     args=[sys.executable,str(verify),'log',str(good),str(host/'gcc'),str(host/'g++'),str(ndk/'bin'/'aarch64-linux-android29-clang'),str(ndk/'bin'/'aarch64-linux-android29-clang++'),'--require-observed']
     if subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).returncode: die('correct_host_target_split_fixture_rejected')
+
+# Node configure must detect the CI machine as x64 from CC_host before GYP generates V8 host
+# sources. The previous failure misdetected host_arch=arm64 and fed ARM64 inline asm to /usr/bin/g++.
+configure_verify=ROOT/'scripts/verify_node_android_configure_output.py'
+with tempfile.TemporaryDirectory(prefix='vibecoder-node-config-host-arch-') as td:
+    d=Path(td); makefile=d/'Makefile'; makefile.write_text('all:\n')
+    good=d/'config-good.gypi'; good.write_text("# generated\n{'variables': {'host_arch': 'x64', 'target_arch': 'arm64', 'want_separate_host_toolset': 1}}\n")
+    result=subprocess.run([sys.executable,str(configure_verify),str(good),str(makefile)], text=True, capture_output=True)
+    if result.returncode: die('node_configure_host_arch_fixture_failed:'+result.stderr.strip())
+    bad=d/'config-bad.gypi'; bad.write_text("{'variables': {'host_arch': 'arm64', 'target_arch': 'arm64', 'want_separate_host_toolset': 1}}\n")
+    result=subprocess.run([sys.executable,str(configure_verify),str(bad),str(makefile)], text=True, capture_output=True)
+    if result.returncode == 0 or 'host_arch_mismatch' not in result.stderr:
+        die('node_configure_arm64_host_misdetection_not_rejected')
+
+host_arch_graph=ROOT/'scripts/verify_node_android_host_arch_graph.py'
+with tempfile.TemporaryDirectory(prefix='vibecoder-node-host-arch-graph-') as td:
+    out=Path(td)/'out'; hostdir=out/'tools/v8_gypfiles'; hostdir.mkdir(parents=True)
+    hostmk=hostdir/'v8_base_without_compiler.host.mk'
+    hostmk.write_text('OBJS := $(obj).host/v8_base_without_compiler/deps/v8/src/heap/base/asm/x64/push_registers_asm.o\n', encoding='utf-8')
+    result=subprocess.run([sys.executable,str(host_arch_graph),str(out)], text=True, capture_output=True)
+    if result.returncode: die('node_host_arch_graph_fixture_failed:'+result.stderr.strip())
+    payload=json.loads(result.stdout.strip())
+    if payload.get('host_arch') != 'x64' or payload.get('node_android_host_arch_graph') != 'VERIFIED':
+        die('node_host_arch_graph_evidence_invalid')
+    hostmk.write_text('OBJS := $(obj).host/v8_base_without_compiler/deps/v8/src/heap/base/asm/arm64/push_registers_asm.o\n', encoding='utf-8')
+    result=subprocess.run([sys.executable,str(host_arch_graph),str(out)], text=True, capture_output=True)
+    if result.returncode == 0 or 'host_push_register_arch_mismatch:arm64' not in result.stderr:
+        die('node_arm64_push_register_host_graph_not_rejected')
+if 'verify_node_android_host_arch_graph.py' not in provision: die('node_host_arch_graph_verifier_not_invoked')
+host_graph_call='verify_node_android_host_arch_graph.py" "$WORK/out"'
+if host_graph_call not in provision: die('node_host_arch_graph_verifier_wrong_root')
+if provision.index(host_graph_call) < provision.index('make -j1 V=1 PYTHON=python3 out/Makefile'):
+    die('node_host_arch_graph_verified_before_gyp_generation')
+if provision.index(host_graph_call) > provision.index('make -j"$JOBS" V=1'):
+    die('node_host_arch_graph_verified_after_expensive_compile')
+if 'node_android_host_arch_graph_invalid' not in provision: die('node_host_arch_graph_fail_closed_missing')
+if 'host_arch_graph_invalid' not in wrapper: die('node_host_arch_graph_failure_classification_missing')
 
 # Node 24.19.0 Android GYP regression: remove only the actual Android AArch64 flag proven to leak
 # into obj.host recipes. Target makefiles must remain byte-for-byte untouched.
@@ -243,3 +284,5 @@ if 'export VIBECODER_BUILD_JOBS="2"' not in node_body:
     die('node_android_parallelism_contract_changed')
 
 print('Part 34.10.11 Android libc + Node timeout regression PASSED')
+
+print('Part 34.10.12 Node configure host-arch regression PASSED')

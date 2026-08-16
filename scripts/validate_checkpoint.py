@@ -4055,6 +4055,7 @@ def check_part34_2_node_staging_lane() -> None:
     toolchain_split_verify = read("scripts/verify_node_android_toolchain_split.py")
     node_cpufeatures_patch = read("scripts/patch_node_android_zlib_cpufeatures.py")
     node_cpufeatures_graph = read("scripts/verify_node_android_cpufeatures_integration.py")
+    node_host_arch_graph = read("scripts/verify_node_android_host_arch_graph.py")
     compile_repair_test = read("scripts/test_part34_10_compile_repairs.py")
     attempt_wrapper = read("scripts/part34_node_execute_cross_build.sh")
     attempt_writer = read("scripts/write_node_cross_build_attempt.py")
@@ -4097,8 +4098,11 @@ def check_part34_2_node_staging_lane() -> None:
         'node_android_cpufeatures_patch_failed:',
         'verify_node_android_cpufeatures_integration.py',
         'node_android_cpufeatures_generated_graph_invalid:',
+        'CC_host="$HOST_CC" CXX_host="$HOST_CXX" AR_host="$HOST_AR"',
         './android-configure "$NDK_ROOT" "$API" arm64',
         'verify_node_android_configure_output.py',
+        'verify_node_android_host_arch_graph.py',
+        'node_android_host_arch_graph_invalid:',
         'node_android_configure_output_invalid:',
         'make -j"$JOBS"',
         'HOST_CC=',
@@ -4177,12 +4181,25 @@ def check_part34_2_node_staging_lane() -> None:
         'ast.literal_eval',
         'config_gypi_missing_or_empty',
         'makefile_missing_or_empty',
+        "variables.get('host_arch') != 'x64'",
         "variables.get('target_arch') != 'arm64'",
+        "variables.get('want_separate_host_toolset') != 1",
         'node_target_type_unexpected',
         "'node_android_configure_output': 'VERIFIED'",
+        "'separate_host_toolset': True",
     ):
         if token not in configure_verify:
             fail(f"Part 34.2.3 Node configure-output verifier contract missing: {token}")
+
+    for token in (
+        'node_android_host_arch_graph',
+        'host_push_register_arch_mismatch',
+        'arm64_push_register_leaked_into_host_graph',
+        'deps/v8/src/heap/base/asm/x64/push_registers_asm.o',
+        'v8_base_without_compiler.host.mk',
+    ):
+        if token not in node_host_arch_graph:
+            fail(f"Part 34.2.3 Node host-architecture generated-graph verifier missing: {token}")
 
     for token in (
         'host_compiler_must_not_be_from_android_ndk',
@@ -4199,11 +4216,15 @@ def check_part34_2_node_staging_lane() -> None:
                   'undefined_is_forbidden_control_regression_present', 'node_cpufeatures_patch_fixture_failed',
                   'node_cpufeatures_failure_classification_missing', 'node_cpufeatures_generated_graph_fixture_failed',
                   'node_cpufeatures_host_graph_leak_not_rejected', 'node_cpufeatures_absolute_ndk_object_not_rejected',
+                  'node_configure_time_host_toolchain_binding_missing',
+                  'node_configure_arm64_host_misdetection_not_rejected',
+                  'node_arm64_push_register_host_graph_not_rejected',
                   'android_agent_routing_contract_missing'):
         if token not in compile_repair_test:
             fail(f"Part 34.10 compile-log repair regression missing: {token}")
 
-    for token in ('host_target_toolchain_split_invalid', 'node_android_host_target_toolchain_split_invalid'):
+    for token in ('host_target_toolchain_split_invalid', 'node_android_host_target_toolchain_split_invalid',
+                  'host_arch_graph_invalid', 'node_android_host_arch_graph_invalid'):
         if token not in attempt_wrapper:
             fail(f"Part 34.2.3 Node attempt classification missing: {token}")
 

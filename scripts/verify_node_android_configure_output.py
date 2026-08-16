@@ -37,13 +37,19 @@ def main() -> int:
     variables = config.get('variables')
     if not isinstance(variables, dict):
         fail('config_variables_missing')
+    if variables.get('host_arch') != 'x64':
+        fail(f'host_arch_mismatch:{variables.get("host_arch")!r}')
     if variables.get('target_arch') != 'arm64':
         fail(f'target_arch_mismatch:{variables.get("target_arch")!r}')
+    if variables.get('want_separate_host_toolset') != 1:
+        fail(f'want_separate_host_toolset_mismatch:{variables.get("want_separate_host_toolset")!r}')
     if variables.get('node_target_type') not in (None, 'executable'):
         fail(f'node_target_type_unexpected:{variables.get("node_target_type")!r}')
     print(json.dumps({
         'node_android_configure_output': 'VERIFIED',
+        'host_arch': 'x64',
         'target_arch': 'arm64',
+        'separate_host_toolset': True,
         'makefile_present': True,
     }, separators=(',', ':')))
     return 0

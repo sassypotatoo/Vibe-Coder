@@ -202,3 +202,18 @@ state after restart.
 wrapper re-verifies the Node package component path before launch. This checkpoint still does not
 claim that Node bytes exist or execute on Android; binary/APK/device evidence remains the final
 external acceptance gate.
+
+## Part 34.2 Android cross-build follow-up — configure-time host architecture authority
+
+A later real CI run progressed through the relative cpufeatures integration and into thousands of
+host/target compiles, then exposed a separate cross-build configuration defect: `/usr/bin/g++`
+received V8's ARM64 `push_registers_asm.cc` for an `obj.host` target. The failure was therefore not a
+Node timeout and not a target-toolchain leak at make time; the generated host graph itself had selected
+the wrong architecture.
+
+The provisioner now binds the host C/C++/archive tools at Node configure time, before architecture
+selection is emitted into `config.gypi` and GYP recipes. Validation requires x64 host + ARM64 target +
+a separate host toolset, and an independent generated-graph guard requires V8's x64 push-register
+object in `v8_base_without_compiler.host.mk` while rejecting ARM64 variants. The guard runs before the
+expensive compile, converting this observed late failure into an early configuration failure if the
+same architecture mix reappears.

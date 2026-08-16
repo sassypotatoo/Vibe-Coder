@@ -270,3 +270,34 @@ cpufeatures staging, host/target split, and Jcode paths are otherwise unchanged.
 
 This checkpoint does not claim post-fix APK or Node-binary success. External CI must reconfirm the
 Minimal/Jcode lanes and allow the Node compile to finish before the full Alpha package can run.
+
+## Part 34.10.12 — Node configure-time host architecture repair
+
+The next external CI run reconfirmed both protected Android lanes after the Part 34.10.11 ABI repair:
+the Minimal diagnostic APK built and passed APK verification, and the Jcode 0.73.0 Android ARM64
+payload again passed its Android ELF/16 KiB checks before the Jcode diagnostic APK built and passed
+verification. The Node lane also retained the repaired relative cpufeatures graph, so neither of those
+previous blockers regressed.
+
+The Node job did not time out this time. After roughly two hours of real host/target compilation it
+failed because an `obj.host` V8 target was compiled by `/usr/bin/g++` from
+`deps/v8/src/heap/base/asm/arm64/push_registers_asm.cc`. The x86_64 host assembler then rejected the
+ARM64 `stp`/`blr`/`ldp` instructions. This is a host-architecture selection failure, not a reason to
+compile host objects with the Android target compiler.
+
+The root cause is fixed before GYP generation. `provision_node_android.sh` now binds `CC_host`,
+`CXX_host`, and `AR_host` while invoking Node's `android-configure`, so Node's configure-time host
+architecture detection sees the actual CI host compiler instead of falling back to the ARM64 NDK
+compiler placed in `CC`/`CXX` by the Android configure wrapper. The configure-output verifier now
+requires `host_arch=x64`, `target_arch=arm64`, and `want_separate_host_toolset=1`.
+
+A new generated-graph guard runs immediately after GYP makefile materialization and before the
+expensive Node compile. It requires the V8 host graph to select
+`deps/v8/src/heap/base/asm/x64/push_registers_asm.o` and rejects ARM64 push-register sources or objects
+from the host graph. This turns the observed two-hour-late architecture mix into an early fail-closed
+configuration error if it ever regresses.
+
+No agent-action routing, Minimal/Jcode build path, vendored Jcode source, Node cpufeatures patch, or
+Node timeout budget is changed in this repair. The current environment still cannot perform the real
+Node Android cross-build, so post-fix Node binary/full Alpha success remains an external CI evidence
+gate rather than a source-level claim.
