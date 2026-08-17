@@ -4336,7 +4336,7 @@ def check_part34_2_node_staging_lane() -> None:
         '- "scripts/part34_node_execute_cross_build.sh"',
         '- "scripts/write_node_cross_build_attempt.py"',
         '- "scripts/bootstrap_pinned_android_ndk_r28c.sh"',
-        'export VIBECODER_BUILD_JOBS="2"',
+        'export VIBECODER_BUILD_JOBS="4"',
         'bash scripts/part34_node_execute_cross_build.sh',
         'bash scripts/part34_node_build_and_verify.sh',
         'vibecoder-part34-node-execution-attempt.json',

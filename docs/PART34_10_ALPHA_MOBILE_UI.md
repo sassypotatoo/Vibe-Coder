@@ -327,3 +327,22 @@ No Node source, cpufeatures patch, host-architecture repair, Minimal/Jcode build
 routing, timeout budget, or vendored Jcode source is changed. A post-repair Node binary/full Alpha APK
 remains an external CI evidence gate.
 
+## Part 34.10.14 — Node CI throughput + timeout repair
+
+The next external CI run proved that the Part 34.10.13 clean-host sanitizer no-op path works: the
+Node configure contract still reported `host_arch=x64`, `target_arch=arm64`, the separate host
+toolset was enabled, the x64 V8 host push-register graph was verified, and the relative cpufeatures
+graph remained verified. Minimal and Jcode diagnostic APK lanes both passed again.
+
+The Node job did not expose a compiler, linker, architecture, cpufeatures, or sanitizer failure. It
+remained inside the real Node/V8 compile until GitHub canceled the job at the configured 240-minute
+job timeout; active `clang++` compiler processes were terminated during cleanup. The repair is
+therefore CI-execution-only: `VIBECODER_BUILD_JOBS` changes from 2 to 4 so the standard runner can
+execute more compile work in parallel, and the Node job safety ceiling changes from 240 to 360
+minutes so a slow but progressing compile is not discarded at exactly four hours.
+
+No Node source, Android/Rust app source, Jcode source/build path, OmniRoute source, runtime packaging
+architecture, cpufeatures patch, host-architecture repair, sanitizer logic, or agent-action routing is
+changed. This checkpoint does not claim a post-change Node binary or Full Alpha APK; external CI is
+still the evidence gate.
+

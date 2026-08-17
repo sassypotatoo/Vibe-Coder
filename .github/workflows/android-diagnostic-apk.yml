@@ -264,7 +264,7 @@ jobs:
   node-android-proof-build:
     name: Exact Node 24.19.0 Android cross-compile + APK
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6.0.2
 
@@ -307,7 +307,7 @@ jobs:
         run: |
           export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
           export VIBECODER_ANDROID_API="29"
-          export VIBECODER_BUILD_JOBS="2"
+          export VIBECODER_BUILD_JOBS="4"
           bash scripts/part34_node_execute_cross_build.sh
 
       - name: Build and verify APK with evidenced Node candidate

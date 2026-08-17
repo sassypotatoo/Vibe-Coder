@@ -288,11 +288,12 @@ if not node_job:
     die('node_android_ci_job_missing')
 node_body=node_job.group('body')
 match=re.search(r'^    timeout-minutes:\s*(\d+)\s*$', node_body, re.M)
-if not match or int(match.group(1)) < 180:
+if not match or int(match.group(1)) < 360:
     die('node_android_ci_timeout_budget_too_small')
-if 'export VIBECODER_BUILD_JOBS="2"' not in node_body:
+if 'export VIBECODER_BUILD_JOBS="4"' not in node_body:
     die('node_android_parallelism_contract_changed')
 
 print('Part 34.10.11 Android libc + Node timeout regression PASSED')
 
 print('Part 34.10.13 Node clean-host sanitizer regression PASSED')
+print('Part 34.10.14 Node CI throughput/timeout regression PASSED')

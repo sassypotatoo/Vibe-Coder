@@ -1,0 +1,51 @@
+{
+  "source_checkpoint": "Part 34.10.13",
+  "step": "34.10.14-node-ci-throughput-timeout-repair",
+  "status": "node_ci_throughput_timeout_recompile_pending",
+  "latest_ci_observations": {
+    "run_id": 31969047075,
+    "commit": "b389e5d37535a75376fdf97047d0b14da45753c5",
+    "minimal_lane_result": "passed",
+    "minimal_apk_artifact_id": 9269309612,
+    "minimal_apk_sha256": "e6439a33cbafde7314075d9e3be3277338b1c4d403c94f5d9797f708777be3bf",
+    "jcode_lane_result": "passed",
+    "jcode_apk_artifact_id": 9269571797,
+    "jcode_apk_sha256": "a99ee66ab6491199adbc8a00db00b4ced4b2dedc08cbafcd59410e17411ed633",
+    "node_configure_host_arch": "x64",
+    "node_configure_target_arch": "arm64",
+    "node_separate_host_toolset": true,
+    "node_generated_host_arch_graph_verified": true,
+    "node_generated_host_push_register_arches": [
+      "x64"
+    ],
+    "node_generated_cpufeatures_graph_verified": true,
+    "node_sanitizer_clean_noop_passed": true,
+    "node_compile_started": true,
+    "node_compile_or_link_error_before_cancel": false,
+    "node_cancel_reason": "github_job_timeout_240_minutes",
+    "node_active_compiler_process_at_cancel": true,
+    "observed_host_compiler_invocation_lines": 2100,
+    "observed_target_clangxx_invocation_lines": 2031,
+    "host_push_register_source_observed": "deps/v8/src/heap/base/asm/x64/push_registers_asm.cc"
+  },
+  "repair": {
+    "scope": "ci_execution_only",
+    "node_build_jobs_before": 2,
+    "node_build_jobs_after": 4,
+    "node_job_timeout_minutes_before": 240,
+    "node_job_timeout_minutes_after": 360,
+    "node_source_changed": false,
+    "node_cpufeatures_patch_changed": false,
+    "node_host_arch_repair_changed": false,
+    "node_sanitizer_changed": false,
+    "android_or_rust_app_source_changed": false,
+    "jcode_build_script_changed": false,
+    "vendored_jcode_changed": false,
+    "omniroute_changed": false,
+    "agent_action_routing_changed": false,
+    "runtime_packaging_architecture_changed": false
+  },
+  "post_fix_compile_claim": false,
+  "external_ci_recompile_required": true,
+  "full_alpha_apk_compiled": false
+}
