@@ -60,7 +60,7 @@ def main() -> int:
 
     prep = read("scripts/prepare_omniroute_android_source.py")
     for token in (
-        "omniroute_archive_sha256_mismatch",
+        "omniroute_reviewed_commit_mismatch",
         "omniroute_archive_parent_traversal",
         "omniroute_archive_symlink_forbidden",
         "omniroute_archive_duplicate_path",

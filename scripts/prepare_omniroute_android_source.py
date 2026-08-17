@@ -56,26 +56,42 @@ def validate_member_name(name: str, expected_root: str) -> PurePosixPath:
     return path
 
 
-def inspect_archive(archive: Path, provenance: dict) -> list[zipfile.ZipInfo]:
+def inspect_archive(archive: Path, provenance: dict) -> tuple[list[zipfile.ZipInfo], str, str, int]:
     if not archive.is_file():
         raise SystemExit("omniroute_reviewed_archive_missing")
     size = archive.stat().st_size
-    if size > MAX_ARCHIVE_BYTES or size != provenance["reviewed_archive_size_bytes"]:
-        raise SystemExit(f"omniroute_archive_size_mismatch:{size}")
+    if size > MAX_ARCHIVE_BYTES:
+        raise SystemExit(f"omniroute_archive_size_limit:{size}")
     digest = sha256_file(archive)
-    if digest != provenance["reviewed_archive_sha256"]:
-        raise SystemExit(f"omniroute_archive_sha256_mismatch:{digest}")
 
-    expected_root = provenance["reviewed_archive_root"]
+    historical_digest = provenance["reviewed_archive_sha256"]
+    historical_root = provenance["reviewed_archive_root"]
+    reviewed_commit = provenance["reviewed_git_commit"]
     seen: set[str] = set()
     total = 0
     with zipfile.ZipFile(archive) as zf:
         infos = zf.infolist()
         if len(infos) > MAX_ENTRIES or len(infos) != provenance["reviewed_archive_entry_count"]:
             raise SystemExit(f"omniroute_archive_entry_count_mismatch:{len(infos)}")
+        roots = {PurePosixPath(info.filename).parts[0] for info in infos if PurePosixPath(info.filename).parts}
+        if len(roots) != 1:
+            raise SystemExit("omniroute_archive_root_count_mismatch")
+        actual_root = next(iter(roots))
+        comment = zf.comment.decode("ascii", errors="strict")
+        if digest == historical_digest:
+            if comment != reviewed_commit:
+                raise SystemExit(f"omniroute_reviewed_commit_mismatch:{comment}")
+            if size != provenance["reviewed_archive_size_bytes"] or actual_root != historical_root:
+                raise SystemExit("omniroute_historical_archive_shape_mismatch")
+        else:
+            if not actual_root.startswith("OmniRoute-"):
+                raise SystemExit(f"omniroute_commit_archive_root_mismatch:{actual_root}")
+            if comment and comment != reviewed_commit:
+                raise SystemExit(f"omniroute_reviewed_commit_mismatch:{comment}")
+
         observed_max_entry = 0
         for info in infos:
-            path = validate_member_name(info.filename, expected_root)
+            path = validate_member_name(info.filename, actual_root)
             normalized = path.as_posix().rstrip("/")
             if normalized in seen:
                 raise SystemExit(f"omniroute_archive_duplicate_path:{normalized}")
@@ -94,8 +110,7 @@ def inspect_archive(archive: Path, provenance: dict) -> list[zipfile.ZipInfo]:
             raise SystemExit(f"omniroute_archive_uncompressed_size_mismatch:{total}")
         if observed_max_entry != provenance["reviewed_archive_max_entry_bytes"]:
             raise SystemExit(f"omniroute_archive_max_entry_size_mismatch:{observed_max_entry}")
-        return infos
-
+        return infos, actual_root, digest, size
 
 def validate_output_directory(output: Path, archive: Path) -> Path:
     expanded = output.expanduser()
@@ -111,17 +126,16 @@ def validate_output_directory(output: Path, archive: Path) -> Path:
     return resolved
 
 
-def extract_archive(archive: Path, output: Path, provenance: dict) -> Path:
+def extract_archive(archive: Path, output: Path, archive_root: str) -> Path:
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True, mode=0o700)
     with zipfile.ZipFile(archive) as zf:
         zf.extractall(output)
-    source = output / provenance["reviewed_archive_root"]
+    source = output / archive_root
     if not source.is_dir():
         raise SystemExit("omniroute_extracted_root_missing")
     return source
-
 
 def verify_source_metadata(source: Path, provenance: dict) -> None:
     package = json.loads((source / "package.json").read_text(encoding="utf-8"))
@@ -169,14 +183,16 @@ def apply_and_verify_patch(source: Path, provenance: dict) -> None:
             raise SystemExit(f"omniroute_patched_target_hash_mismatch:{entry['target_path']}:{digest}")
 
 
-def write_evidence(archive: Path, source: Path, output: Path, provenance: dict) -> None:
+def write_evidence(archive: Path, source: Path, output: Path, provenance: dict, archive_sha256: str, archive_size: int) -> None:
     patch_meta = json.loads(PATCH_META.read_text(encoding="utf-8"))
     evidence = {
         "schema": 1,
         "status": "reviewed_source_prepared",
         "archive_name": archive.name,
-        "archive_sha256": provenance["reviewed_archive_sha256"],
-        "archive_size_bytes": provenance["reviewed_archive_size_bytes"],
+        "archive_sha256": archive_sha256,
+        "archive_size_bytes": archive_size,
+        "historical_reviewed_archive_sha256": provenance["reviewed_archive_sha256"],
+        "reviewed_git_commit": provenance["reviewed_git_commit"],
         "version": provenance["version"],
         "node_engine": provenance["node_engine"],
         "patch_profile_id": patch_meta["profile"]["profile_id"],
@@ -205,12 +221,12 @@ def main() -> int:
 
     provenance = json.loads(PROVENANCE.read_text(encoding="utf-8"))
     output_dir = validate_output_directory(args.output_dir, args.archive)
-    inspect_archive(args.archive, provenance)
-    source = extract_archive(args.archive, output_dir, provenance)
+    _infos, archive_root, archive_sha256, archive_size = inspect_archive(args.archive, provenance)
+    source = extract_archive(args.archive, output_dir, archive_root)
     verify_source_metadata(source, provenance)
     apply_and_verify_patch(source, provenance)
     evidence = args.evidence or (output_dir / "VIBECODER_OMNIROUTE_SOURCE_EVIDENCE.json")
-    write_evidence(args.archive, source, evidence, provenance)
+    write_evidence(args.archive, source, evidence, provenance, archive_sha256, archive_size)
     print(f"OmniRoute reviewed source prepared: {source}")
     print(f"Evidence: {evidence}")
     return 0

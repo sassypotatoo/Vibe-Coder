@@ -40,5 +40,8 @@
   "source_ref": "release/v3.8.50",
   "reviewed_git_commit": "ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f",
   "reviewed_archive_download_path": "archive/refs/heads/release/v3.8.50.zip",
-  "reviewed_archive_ref_is_mutable_and_hash_must_match": true
+  "reviewed_archive_ref_is_mutable_and_hash_must_match": true,
+  "build_fetch_ref": "ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f",
+  "build_fetch_is_immutable_commit": true,
+  "historical_reviewed_archive_sha256_retained_for_provenance": true
 }

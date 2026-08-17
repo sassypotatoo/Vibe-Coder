@@ -170,6 +170,7 @@ GENERATED_PATH_PREFIXES = (
     "android/app/.cxx/",
     "android/node_runtime/build/",
     "android/node_runtime/.cxx/",
+    "android/.gradle/",
     "target/",
     ".toolchains/",
     ".gradle/",
@@ -6272,7 +6273,7 @@ def check_part34_3_omniroute_source_admission() -> None:
 
     prep = read("scripts/prepare_omniroute_android_source.py")
     for token in (
-        "omniroute_archive_sha256_mismatch",
+        "omniroute_reviewed_commit_mismatch",
         "omniroute_archive_parent_traversal",
         "omniroute_archive_symlink_forbidden",
         "omniroute_archive_duplicate_path",

@@ -170,7 +170,7 @@ for token in (
     'SOURCE_REF="release/v3.8.50"',
     'REVIEWED_COMMIT="ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f"',
     'EXPECTED_SHA256="1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7"',
-    'archive/refs/heads/${SOURCE_REF}.zip',
+    'URL="${REPO}/archive/${REVIEWED_COMMIT}.zip"',
     'comment != commit'):
     need(omni_fetch, token, 'exact reviewed OmniRoute archive fetch')
 for token in ('jcode_build_evidence_payload_mismatch', 'payload_bound_to_proof_evidence',

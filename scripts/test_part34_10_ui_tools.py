@@ -132,6 +132,7 @@ assert 'MODE" == "node" || "$MODE" == "omniroute_service"' in apk_verify
 assert 'SOURCE_REF="release/v3.8.50"' in omni_fetch
 assert 'REVIEWED_COMMIT="ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f"' in omni_fetch
 assert '1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7' in omni_fetch
+assert 'URL="${REPO}/archive/${REVIEWED_COMMIT}.zip"' in omni_fetch
 assert 'comment != commit' in omni_fetch
 assert 'base_alpha_apk_with_play_on_demand_node_not_device_execution' in alpha_evidence
 assert "'device_execution_proven': False" in alpha_evidence

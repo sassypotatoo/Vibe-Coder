@@ -126,10 +126,13 @@ The source now has a fail-closed full-Alpha package lane:
    signed, zipaligned, arm64-only package; and
 7. package evidence records hashes but deliberately leaves device-execution claims false.
 
-The earlier OmniRoute fetch prototype incorrectly guessed a `v3.8.50` tag. The reviewed archive root
-and upstream ref are actually `release/v3.8.50`; the corrected fetcher downloads that exact branch
-archive and accepts it only when both the reviewed archive SHA and embedded commit comment match.
-A moving branch therefore cannot silently change the build input.
+The historical reviewed OmniRoute input came from `release/v3.8.50` at commit
+`ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f`. That release branch later moved, so build transport
+must not re-download the moving branch and pretend it is the reviewed input. The fetcher now requests
+the immutable reviewed commit archive directly. The original reviewed ZIP SHA remains historical
+provenance; fresh transport is admitted only when the embedded commit is exact and the reviewed
+entry-count/uncompressed-size/maximum-entry invariants still match, after which package metadata and
+all hash-pinned VibeCoder patch targets are independently verified.
 
 Normal app startup also no longer launches the heavyweight diagnostic suite in parallel with the
 chat runtime bootstrap. Diagnostics auto-run only when the physical-device harness passes the
