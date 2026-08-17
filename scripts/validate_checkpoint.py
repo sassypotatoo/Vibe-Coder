@@ -6281,7 +6281,10 @@ def check_part34_3_omniroute_source_admission() -> None:
         "omniroute_output_directory_protected",
         "omniroute_archive_max_entry_size_mismatch",
         "apply_omniroute_runtime_patches.py",
+        "apply_omniroute_android_stub_compat.py",
         "omniroute_patched_target_hash_mismatch",
+        "omniroute_android_stub_compat_target_hash_mismatch",
+        '"android_stub_compat_targets": [',
     ):
         if token not in prep:
             fail(f"Part 34.3 source admission contract missing: {token}")
@@ -6425,6 +6428,21 @@ def check_part34_3_omniroute_source_admission() -> None:
             "[omniroute-build] START",
             "still running after",
             "vibecoder-part34-omniroute-build.log",
+        ),
+        "scripts/apply_omniroute_android_stub_compat.py": (
+            "omniroute_android_stub_compat_input_hash_mismatch",
+            "omniroute_android_stub_compat_final_hash_mismatch",
+        ),
+        "scripts/test_part34_3_android_stub_compat.py": (
+            "Part 34.3 Android minimal-stub compatibility regression PASSED",
+            "getInstalledVersion",
+            "installCertResult",
+        ),
+        ".github/workflows/android-diagnostic-apk.yml": (
+            "test_part34_3_android_stub_compat.py",
+        ),
+        ".github/workflows/android-play-bundle.yml": (
+            "test_part34_3_android_stub_compat.py",
         ),
         "scripts/test_part34_3_live_build_logging.py": (
             "Part 34.3 live build logging regression PASSED",

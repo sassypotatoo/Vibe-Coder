@@ -22,6 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PROVENANCE = ROOT / "third_party" / "provenance" / "omniroute-3.8.50-reviewed.json"
 PATCH_META = ROOT / "third_party" / "patches" / "omniroute-3.8.50-vibecoder-deterministic-routing.json"
 PATCHER = ROOT / "scripts" / "apply_omniroute_runtime_patches.py"
+STUB_COMPAT_META = ROOT / "third_party" / "patches" / "omniroute-3.8.50-android-stub-compat.json"
+STUB_COMPAT = ROOT / "scripts" / "apply_omniroute_android_stub_compat.py"
 
 MAX_ARCHIVE_BYTES = 80 * 1024 * 1024
 MAX_ENTRIES = 20_000
@@ -183,8 +185,33 @@ def apply_and_verify_patch(source: Path, provenance: dict) -> None:
             raise SystemExit(f"omniroute_patched_target_hash_mismatch:{entry['target_path']}:{digest}")
 
 
+def apply_and_verify_android_stub_compat(source: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(STUB_COMPAT), str(source)],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if result.returncode != 0:
+        sys.stderr.write(result.stdout)
+        raise SystemExit(f"omniroute_android_stub_compat_apply_failed:{result.returncode}")
+    meta = json.loads(STUB_COMPAT_META.read_text(encoding="utf-8"))
+    for entry in meta.get("files", []):
+        target = source / entry["target_path"]
+        if not target.is_file():
+            raise SystemExit(f"omniroute_android_stub_compat_target_missing:{entry['target_path']}")
+        digest = sha256_file(target)
+        if digest != entry["expected_patched_sha256"]:
+            raise SystemExit(
+                f"omniroute_android_stub_compat_target_hash_mismatch:{entry['target_path']}:{digest}"
+            )
+
+
 def write_evidence(archive: Path, source: Path, output: Path, provenance: dict, archive_sha256: str, archive_size: int) -> None:
     patch_meta = json.loads(PATCH_META.read_text(encoding="utf-8"))
+    stub_compat_meta = json.loads(STUB_COMPAT_META.read_text(encoding="utf-8"))
     evidence = {
         "schema": 1,
         "status": "reviewed_source_prepared",
@@ -204,6 +231,13 @@ def write_evidence(archive: Path, source: Path, output: Path, provenance: dict, 
                 "sha256": sha256_file(source / entry["target_path"]),
             }
             for entry in patch_meta["files"]
+        ],
+        "android_stub_compat_targets": [
+            {
+                "path": entry["target_path"],
+                "sha256": sha256_file(source / entry["target_path"]),
+            }
+            for entry in stub_compat_meta["files"]
         ],
         "runtime_bundle_built": False,
         "android_native_dependency_resolution_proven": False,
@@ -226,6 +260,7 @@ def main() -> int:
     source = extract_archive(args.archive, output_dir, archive_root)
     verify_source_metadata(source, provenance)
     apply_and_verify_patch(source, provenance)
+    apply_and_verify_android_stub_compat(source)
     evidence = args.evidence or (output_dir / "VIBECODER_OMNIROUTE_SOURCE_EVIDENCE.json")
     write_evidence(args.archive, source, evidence, provenance, archive_sha256, archive_size)
     print(f"OmniRoute reviewed source prepared: {source}")

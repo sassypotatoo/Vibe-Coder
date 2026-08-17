@@ -154,6 +154,7 @@ jobs:
         run: |
           python3 scripts/validate_part34_3.py
           python3 scripts/test_part34_3_bundle_tools.py
+          python3 scripts/test_part34_3_android_stub_compat.py
           python3 scripts/test_part34_3_live_build_logging.py
           python3 scripts/test_part34_3_asset_tools.py
           python3 scripts/test_part34_3_service_tools.py
@@ -334,6 +335,7 @@ jobs:
           python3 scripts/validate_checkpoint.py
           python3 scripts/validate_part34_3.py
           python3 scripts/test_part34_3_bundle_tools.py
+          python3 scripts/test_part34_3_android_stub_compat.py
           python3 scripts/test_part34_3_live_build_logging.py
           python3 scripts/test_part34_3_asset_tools.py
           python3 scripts/test_part34_3_service_tools.py

@@ -68,7 +68,10 @@ def main() -> int:
         "omniroute_output_directory_protected",
         "omniroute_archive_max_entry_size_mismatch",
         "apply_omniroute_runtime_patches.py",
+        "apply_omniroute_android_stub_compat.py",
         "omniroute_patched_target_hash_mismatch",
+        "omniroute_android_stub_compat_target_hash_mismatch",
+        '"android_stub_compat_targets": [',
         'runtime_bundle_built": False',
         '"archive_root": source.name',
     ):
@@ -135,6 +138,26 @@ def main() -> int:
         "OmniRoute Android runtime bundle verification PASSED",
     ):
         require(verifier, token, "OmniRoute Android bundle verifier")
+
+    stub_compat = read("scripts/apply_omniroute_android_stub_compat.py")
+    for token in (
+        "omniroute-3.8.50-android-stub-compat.json",
+        "omniroute_android_stub_compat_input_hash_mismatch",
+        "omniroute_android_stub_compat_final_hash_mismatch",
+        "src/lib/services/installers/ninerouter.stub.ts",
+        "src/mitm/cert/install.stub.ts",
+    ):
+        require(stub_compat, token, "OmniRoute Android minimal-stub compatibility")
+
+    stub_compat_regression = read("scripts/test_part34_3_android_stub_compat.py")
+    for token in (
+        "Part 34.3 Android minimal-stub compatibility regression PASSED",
+        "getInstalledVersion",
+        "getLatestVersion",
+        "installCertResult",
+        "omniroute_android_stub_compat_input_hash_mismatch",
+    ):
+        require(stub_compat_regression, token, "OmniRoute Android minimal-stub compatibility regression")
 
     root_regression = read("scripts/test_part34_3_source_root_resolution.py")
     for token in (

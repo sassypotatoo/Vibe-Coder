@@ -1,0 +1,19 @@
+{
+  "files": [
+    {
+      "expected_patched_sha256": "99f75388a904e5eac7f17439ac74c8ddb265947fce622080c1b5cb3499e5e27b",
+      "required_upstream_sha256": "a85cc43bf3a5da3de9d88054696192de89bbd45c9761c6be8fdb210fdd44cb4d",
+      "target_path": "src/lib/services/installers/ninerouter.stub.ts"
+    },
+    {
+      "expected_patched_sha256": "690dd92e1644081011441f483c456fbf3920351a2c7a19de5ba710424dda6e1d",
+      "required_upstream_sha256": "e1c011d6d4d8ff8e4f2f4da3a071cb2cbc493786b896dca476d135b0527b8909",
+      "target_path": "src/mitm/cert/install.stub.ts"
+    }
+  ],
+  "purpose": "Preserve minimal-profile module export contracts required by the Android backend-only Turbopack build while keeping privileged desktop-only features fail-closed.",
+  "reviewed_git_commit": "ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f",
+  "schema": 1,
+  "upstream": "OmniRoute",
+  "upstream_version": "3.8.50"
+}

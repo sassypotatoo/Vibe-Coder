@@ -107,6 +107,7 @@ jobs:
           test -n "$NODE" -a -s "$NODE"
           test -n "$NODE_EVIDENCE" -a -s "$NODE_EVIDENCE"
           python3 scripts/validate_checkpoint.py
+          python3 scripts/test_part34_3_android_stub_compat.py
           python3 scripts/test_part34_3_live_build_logging.py
           python3 scripts/validate_part34_10.py
           python3 scripts/test_part34_10_ui_tools.py
