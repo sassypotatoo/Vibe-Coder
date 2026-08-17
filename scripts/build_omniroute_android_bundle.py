@@ -35,6 +35,23 @@ def version(exe: str, *args: str) -> str:
     return r.stdout.strip()
 
 
+def resolve_prepared_source(prepared: Path, admission_evidence: Path) -> Path:
+    try:
+        admission = json.loads(admission_evidence.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"omniroute_source_admission_evidence_invalid:{exc}")
+    archive_root = admission.get("archive_root")
+    if not isinstance(archive_root, str) or not archive_root or Path(archive_root).name != archive_root:
+        raise SystemExit("omniroute_source_admission_root_invalid")
+    prepared_root = prepared.resolve()
+    source = (prepared_root / archive_root).resolve()
+    if source.parent != prepared_root:
+        raise SystemExit("omniroute_source_admission_root_escape")
+    if not source.is_dir():
+        raise SystemExit(f"omniroute_source_admission_root_missing:{archive_root}")
+    return source
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("reviewed_archive", type=Path)
@@ -82,7 +99,7 @@ def main() -> int:
     try:
         run([sys.executable, str(PREP), str(args.reviewed_archive), str(prepared), "--evidence", str(admission_evidence)], log=build_log)
         evidence["source_admitted"] = True
-        source = prepared / "OmniRoute-release-v3.8.50"
+        source = resolve_prepared_source(prepared, admission_evidence)
         env = os.environ.copy()
         env["PATH"] = str(Path(node_exe).resolve().parent) + os.pathsep + env.get("PATH", "")
         env.update(PROFILE["build"]["environment"])

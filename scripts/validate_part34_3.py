@@ -70,6 +70,7 @@ def main() -> int:
         "apply_omniroute_runtime_patches.py",
         "omniroute_patched_target_hash_mismatch",
         'runtime_bundle_built": False',
+        '"archive_root": source.name',
     ):
         require(prep, token, "OmniRoute source admission")
 
@@ -135,6 +136,15 @@ def main() -> int:
     ):
         require(verifier, token, "OmniRoute Android bundle verifier")
 
+    root_regression = read("scripts/test_part34_3_source_root_resolution.py")
+    for token in (
+        "Part 34.3 source-root handoff regression PASSED",
+        "OmniRoute-ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f",
+        "omniroute_source_admission_root_invalid",
+        "omniroute_source_admission_root_missing",
+    ):
+        require(root_regression, token, "OmniRoute source-root regression")
+
     regression = read("scripts/test_part34_3_bundle_tools.py")
     for token in (
         "Part 34.3 bundle-tool regression PASSED",
@@ -154,6 +164,9 @@ def main() -> int:
         "prepare_omniroute_android_source.py",
         "prepare_omniroute_android_bundle.py",
         "verify_omniroute_android_bundle.py",
+        "resolve_prepared_source",
+        "omniroute_source_admission_root_invalid",
+        "omniroute_source_admission_root_missing",
     ):
         require(builder, token, "OmniRoute Android bundle builder")
 
