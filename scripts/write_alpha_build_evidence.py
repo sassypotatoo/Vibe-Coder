@@ -5,7 +5,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 JCODE = 'lib/arm64-v8a/libvibecoder_jcode_exec.so'
-NODE = 'lib/arm64-v8a/libvibecoder_node_exec.so'
 HOST = 'lib/arm64-v8a/libvibecoder_android_host.so'
 JNI = 'lib/arm64-v8a/libvibecoder_shell_jni.so'
 OMNI_MANIFEST = 'assets/omniroute/bundle/.vibecoder-omniroute-bundle.json'
@@ -44,24 +43,22 @@ def native_claim(evidence: dict, entry: str) -> dict:
     fail('jcode_build_evidence_entry_missing')
 
 def main() -> int:
-    if len(sys.argv) != 5:
-        fail('usage: write_alpha_build_evidence.py APK JCODE_BUILD_EVIDENCE NODE_CROSS_EVIDENCE OUTPUT_JSON')
+    if len(sys.argv) != 4:
+        fail('usage: write_alpha_build_evidence.py APK JCODE_BUILD_EVIDENCE OUTPUT_JSON')
     apk = Path(sys.argv[1]).resolve()
     jcode_evidence_path = Path(sys.argv[2]).resolve()
-    node_evidence_path = Path(sys.argv[3]).resolve()
-    output = Path(sys.argv[4]).resolve()
+    output = Path(sys.argv[3]).resolve()
     if not apk.is_file() or apk.stat().st_size <= 0:
         fail('apk_missing_or_empty')
     jcode_evidence = load_json(jcode_evidence_path, 'jcode_build_evidence')
-    node_evidence = load_json(node_evidence_path, 'node_cross_build_evidence')
 
     with zipfile.ZipFile(apk) as zf:
         names = set(zf.namelist())
-        for required in (JNI, HOST, JCODE, NODE, OMNI_MANIFEST):
+        for required in (JNI, HOST, JCODE, OMNI_MANIFEST):
             if required not in names:
                 fail(f'required_apk_entry_missing:{required}')
         native = {}
-        for entry in (JNI, HOST, JCODE, NODE):
+        for entry in (JNI, HOST, JCODE):
             data = zf.read(entry)
             native[entry] = {'size': len(data), 'sha256': sha256_bytes(data)}
         omni_manifest_bytes = zf.read(OMNI_MANIFEST)
@@ -79,14 +76,6 @@ def main() -> int:
     if jcode_claim.get('sha256') != native[JCODE]['sha256'] or jcode_claim.get('size') != native[JCODE]['size']:
         fail('jcode_build_evidence_payload_mismatch')
 
-    node_claim = node_evidence.get('node') or {}
-    if node_claim.get('version') != '24.19.0':
-        fail('node_cross_evidence_version_mismatch')
-    if node_claim.get('output_sha256') != native[NODE]['sha256'] or node_claim.get('output_size') != native[NODE]['size']:
-        fail('node_cross_evidence_payload_mismatch')
-    target=node_evidence.get('target') or {}
-    if target.get('os') != 'android' or target.get('abi') != 'arm64-v8a' or target.get('libc') != 'bionic':
-        fail('node_cross_evidence_target_mismatch')
     if omni_manifest.get('component_id') != 'omniroute' or omni_manifest.get('version') != '3.8.50':
         fail('omniroute_manifest_identity_mismatch')
     if omni_manifest.get('profile_id') != 'vibecoder-omniroute-android-backend-v1':
@@ -96,7 +85,7 @@ def main() -> int:
         'schema': 1,
         'part': 34,
         'step': '34.10.3-precompile-full-alpha-package',
-        'claim': 'full_alpha_apk_package_evidence_only_not_device_execution',
+        'claim': 'base_alpha_apk_with_play_on_demand_node_not_device_execution',
         'application_id': 'com.vibecoder.shell',
         'apk': {'name': apk.name, 'size': apk.stat().st_size, 'sha256': sha256_file(apk)},
         'native_entries': native,
@@ -108,8 +97,9 @@ def main() -> int:
         },
         'node': {
             'version_requirement': '24.19.0',
-            'cross_build_evidence_sha256': sha256_file(node_evidence_path),
-            'payload_bound_to_cross_build_evidence': True,
+            'delivery': 'play_feature_on_demand',
+            'module': 'node_runtime',
+            'bundled_in_base_apk': False,
             'device_execution_proven': False,
         },
         'omniroute': {

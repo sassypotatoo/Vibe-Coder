@@ -280,9 +280,12 @@ if re.search(r'libc::renameat2\([\s\S]{0,400}?\n\s*libc::RENAME_EXCHANGE,', chec
     die('android_renameat2_untyped_flags_regression')
 
 workflow=(ROOT/'.github/workflows/android-diagnostic-apk.yml').read_text()
+node_runtime_workflow=(ROOT/'.github/workflows/node-runtime-proof.yml').read_text()
+if 'node-android-proof-build:' in workflow:
+    die('node_android_ci_job_must_be_detached_from_normal_app_ci')
 node_job=re.search(
     r'(?ms)^  node-android-proof-build:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:\n|\Z)',
-    workflow,
+    node_runtime_workflow,
 )
 if not node_job:
     die('node_android_ci_job_missing')
@@ -297,3 +300,4 @@ print('Part 34.10.11 Android libc + Node timeout regression PASSED')
 
 print('Part 34.10.13 Node clean-host sanitizer regression PASSED')
 print('Part 34.10.14 Node CI throughput/timeout regression PASSED')
+print('Part 34.10.15 Node on-demand CI isolation regression PASSED')

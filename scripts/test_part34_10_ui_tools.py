@@ -62,7 +62,9 @@ assert 'startChatRuntime();\n        runDiagnostics();' not in activity
 assert '--ez vibecoder_diagnostic_test true' in device_harness
 assert '|| "$MODE" == "alpha"' in device_harness
 assert "if mode in ('jcode', 'alpha'):" in device_harness
-assert "if mode in ('node', 'alpha'):" in device_harness
+assert "if mode == 'node':" in device_harness
+assert "if mode in ('omniroute_asset', 'alpha'):" in device_harness
+assert "if mode in ('omniroute_service', 'omniroute_gateway', 'omniroute_inference'):" in device_harness
 
 # New Chat / Send / Stop are real JNI calls, not UI fabrications.
 assert 'NativeBridge.nativeChatCreate()' in activity
@@ -108,19 +110,20 @@ for forbidden in ('Deployed to staging','Build successful','Firebase','MCP conne
 # Strict source gate must catch warnings that Gradle's ordinary compile can otherwise tolerate.
 assert 'FileLock installLock = lockChannel.lock()' in installer
 assert 'installLock.isValid()' in installer
-assert 'javac --release 17 -Xlint:all -Werror' in strict
-assert 'platforms/android-$PLATFORM/android.jar' in strict
+assert ':app:compileDebugJavaWithJavac' in strict
+assert 'options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))' in (ROOT/'android/app/build.gradle.kts').read_text()
+assert 'platforms/android-36/android.jar' in strict
 assert 'bash scripts/part34_10_strict_java_compile.sh' in workflow
 
-# Final pre-compile lane must package all runtime pieces into the same APK.
+# Base Alpha stays small; Node is delivered on demand by a Play feature split.
 assert 'full-alpha-package:' in workflow
-assert 'needs: [jcode-android-proof-build, node-android-proof-build]' in workflow
+assert 'needs: [jcode-android-proof-build]' in workflow
 assert 'actions/setup-node@v6.4.0' in workflow
 assert 'package-manager-cache: false' in workflow
-assert workflow.count('actions/download-artifact@v8.0.1') >= 2
+assert workflow.count('actions/download-artifact@v8.0.1') >= 1
 assert 'bash scripts/fetch_omniroute_reviewed_archive.sh' in workflow
 assert 'bash scripts/part34_alpha_build_and_verify.sh' in workflow
-for token in ('libvibecoder_jcode_exec.so','libvibecoder_node_exec.so',
+for token in ('libvibecoder_jcode_exec.so',
               'build_omniroute_android_bundle.py','stage_omniroute_android_asset.py',
               'verify_android_diagnostic_apk.sh" "$APK" alpha','write_alpha_build_evidence.py'):
     assert token in alpha_build
@@ -130,7 +133,14 @@ assert 'SOURCE_REF="release/v3.8.50"' in omni_fetch
 assert 'REVIEWED_COMMIT="ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f"' in omni_fetch
 assert '1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7' in omni_fetch
 assert 'comment != commit' in omni_fetch
-assert 'full_alpha_apk_package_evidence_only_not_device_execution' in alpha_evidence
+assert 'base_alpha_apk_with_play_on_demand_node_not_device_execution' in alpha_evidence
 assert "'device_execution_proven': False" in alpha_evidence
 assert "'device_service_round_trip_proven': False" in alpha_evidence
-print('Part 34.10.3 UI/runtime/full-package pre-compile regression PASSED')
+delivery=(ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java').read_text()
+feature=(ROOT/'android/node_runtime/src/main/AndroidManifest.xml').read_text()
+assert 'SplitInstallManagerFactory.create' in delivery
+assert '.addModule(MODULE_NAME)' in delivery
+assert 'bytesDownloaded()' in delivery and 'totalBytesToDownload()' in delivery
+assert 'startConfirmationDialogForResult' in delivery and 'cancelInstall' in delivery
+assert '<dist:on-demand />' in feature and 'dist:fusing dist:include="false"' in feature
+print('Part 34.10.15 UI/runtime/on-demand-node pre-compile regression PASSED')

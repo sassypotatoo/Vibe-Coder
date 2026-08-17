@@ -16,6 +16,7 @@ core=read(Path('crates/vibecoder-core/src/lib.rs'))
 strings=read(Path('android/app/src/main/res/values/strings.xml'))
 manifest=read(Path('android/app/src/main/AndroidManifest.xml'))
 workflow=read(Path('.github/workflows/android-diagnostic-apk.yml'))
+node_runtime_workflow=read(Path('.github/workflows/node-runtime-proof.yml'))
 strict_java=read(Path('scripts/part34_10_strict_java_compile.sh'))
 core_manifest=read(Path('crates/vibecoder-core/Cargo.toml'))
 host_manifest=read(Path('crates/vibecoder-android-host/Cargo.toml'))
@@ -136,11 +137,12 @@ if 'run_explicit_agent_loop' in host or 'run_persisted_explicit' in host:
 need(strings, '<string name="app_name">VibeCoder</string>', 'app label')
 need(manifest, 'android:windowSoftInputMode="adjustResize"', 'IME resize boundary')
 need(workflow, 'bash scripts/part34_10_strict_java_compile.sh', 'strict Java CI gate')
-need(strict_java, 'javac --release 17 -Xlint:all -Werror', 'strict Java warnings-as-errors')
+need(strict_java, ':app:compileDebugJavaWithJavac', 'strict Java Gradle compile task')
+need(read(Path('android/app/build.gradle.kts')), 'options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))', 'strict Java warnings-as-errors')
 
 for token in (
     'full-alpha-package:',
-    'needs: [jcode-android-proof-build, node-android-proof-build]',
+    'needs: [jcode-android-proof-build]',
     'actions/setup-node@v6.4.0',
     'node-version: "24.19.0"',
     'package-manager-cache: false',
@@ -149,14 +151,16 @@ for token in (
     'bash scripts/part34_alpha_build_and_verify.sh',
     'vibecoder-part34-full-alpha-apk',
     'python3 scripts/test_part34_10_alpha_package_tools.py'):
-    need(workflow, token, 'full Alpha one-APK CI lane')
+    need(workflow, token, 'base Alpha CI lane with Node on-demand')
 for token in (
-    'libvibecoder_jcode_exec.so', 'libvibecoder_node_exec.so',
+    'libvibecoder_jcode_exec.so',
     'build_omniroute_android_bundle.py', 'stage_omniroute_android_asset.py',
     'build_android_host.sh', 'build_android_shell.sh',
     'verify_android_diagnostic_apk.sh" "$APK" alpha',
     'write_alpha_build_evidence.py'):
-    need(alpha_build, token, 'full Alpha build script')
+    need(alpha_build, token, 'base Alpha build script')
+if 'node_payload_not_staged' in alpha_build or 'libvibecoder_node_exec.so' in alpha_build:
+    raise SystemExit('Part 34.10.15 base Alpha must not require bundled Node payload')
 for token in (
     'MODE" == "jcode" || "$MODE" == "alpha"',
     'MODE" == "node" || "$MODE" == "omniroute_service"',
@@ -170,9 +174,9 @@ for token in (
     'comment != commit'):
     need(omni_fetch, token, 'exact reviewed OmniRoute archive fetch')
 for token in ('jcode_build_evidence_payload_mismatch', 'payload_bound_to_proof_evidence',
-              'payload_bound_to_cross_build_evidence'):
+              'play_feature_on_demand'):
     need(alpha_package_regression, token, 'Alpha package evidence regression')
-for token in ('full_alpha_apk_package_evidence_only_not_device_execution',
+for token in ('base_alpha_apk_with_play_on_demand_node_not_device_execution',
               "'device_execution_proven': False",
               "'device_service_round_trip_proven': False"):
     need(alpha_evidence, token, 'non-overclaiming Alpha build evidence')
@@ -216,7 +220,7 @@ expected={
  'system_bar_and_ime_insets_handled':True,'predictive_back_drawer_handled':True,
  'chat_render_memory_bounded':True,'strict_java_ci_gate':True,
  'diagnostics_auto_run_only_for_test_intent':True,'normal_app_start_does_not_duplicate_diagnostics':True,
- 'full_alpha_build_lane_ready':True,'full_alpha_requires_jcode_node_omniroute_same_apk':True,
+ 'full_alpha_build_lane_ready':True,'full_alpha_requires_jcode_node_omniroute_same_apk':False,
  'exact_reviewed_omniroute_archive_fetch_fail_closed':True,'full_alpha_apk_compiled':False,
  'full_alpha_package_verified':False,'physical_alpha_acceptance_proven':False,
  'physical_alpha_acceptance_mode_defined':True}
@@ -236,10 +240,10 @@ if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'node_ci_throughput_timeout_recompile_pending':
-    raise SystemExit('Part 34.10.14 PROJECT_STATE repair status mismatch')
-if project.get('step') != '34.10.14-node-ci-throughput-timeout-repair':
-    raise SystemExit('Part 34.10.14 PROJECT_STATE repair step mismatch')
+if project.get('status') != 'node_on_demand_delivery_source_ready_play_bundle_device_proof_pending':
+    raise SystemExit('Part 34.10.15 PROJECT_STATE status mismatch')
+if project.get('step') != '34.10.15-node-on-demand-delivery':
+    raise SystemExit('Part 34.10.15 PROJECT_STATE step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -257,7 +261,7 @@ expected_state={
  'chat_render_memory_bounded':True,'strict_java_ci_gate':True,
  'strict_java_stub_compile_proven_in_audit_runner':True,
  'diagnostics_auto_run_only_for_test_intent':True,'normal_app_start_does_not_duplicate_diagnostics':True,
- 'full_alpha_build_lane_ready':True,'full_alpha_requires_jcode_node_omniroute_same_apk':True,
+ 'full_alpha_build_lane_ready':True,'full_alpha_requires_jcode_node_omniroute_same_apk':False,
  'exact_reviewed_omniroute_archive_fetch_fail_closed':True,'full_alpha_apk_compiled':False,
  'full_alpha_package_verified':False,'physical_alpha_acceptance_proven':False,
  'physical_alpha_acceptance_mode_defined':True}
@@ -277,10 +281,10 @@ if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'node_ci_throughput_timeout_recompile_pending':
-    raise SystemExit('Part 34.10.14 PART34_STATE repair status mismatch')
-if state.get('step') != '34.10.14-node-ci-throughput-timeout-repair':
-    raise SystemExit('Part 34.10.14 PART34_STATE repair step mismatch')
+if state.get('status') != 'node_on_demand_delivery_source_ready_play_bundle_device_proof_pending':
+    raise SystemExit('Part 34.10.15 PART34_STATE status mismatch')
+if state.get('step') != '34.10.15-node-on-demand-delivery':
+    raise SystemExit('Part 34.10.15 PART34_STATE step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -397,10 +401,10 @@ for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
         raise SystemExit(f'Part 34.10.14 {label} generated host graph object contract mismatch')
     if record.get('node_ci_timeout_minutes') != 360 or record.get('node_ci_build_jobs') != 4:
         raise SystemExit(f'Part 34.10.14 {label} Node CI throughput/timeout contract mismatch')
-    if record.get('status') != 'node_ci_throughput_timeout_recompile_pending':
-        raise SystemExit(f'Part 34.10.14 {label} status mismatch')
-    if record.get('step') != '34.10.14-node-ci-throughput-timeout-repair':
-        raise SystemExit(f'Part 34.10.14 {label} step mismatch')
+    if record.get('status') != 'node_on_demand_delivery_source_ready_play_bundle_device_proof_pending':
+        raise SystemExit(f'Part 34.10.15 {label} status mismatch')
+    if record.get('step') != '34.10.15-node-on-demand-delivery':
+        raise SystemExit(f'Part 34.10.15 {label} step mismatch')
     if record.get('fresh_android_compile') is not False or record.get('full_alpha_apk_compiled') is not False:
         raise SystemExit(f'Part 34.10.14 {label} overclaims post-repair compile/full Alpha proof')
 
@@ -436,8 +440,8 @@ if latest_repair.get('post_fix_compile_claim') is not False or latest_repair.get
 
 # Part 34.10.11 historical compiler evidence and ABI repair.
 need(checkpoint_local, 'libc::RENAME_EXCHANGE as libc::c_uint', 'Android renameat2 flags type repair')
-if 'timeout-minutes: 360' not in workflow:
-    raise SystemExit('Part 34.10.14 Node CI timeout extension missing')
+if 'timeout-minutes: 360' not in node_runtime_workflow:
+    raise SystemExit('Part 34.10.14 historical Node CI timeout contract missing from dedicated runtime workflow')
 if latest_compile_repair.get('step') != '34.10.11-android-libc-node-timeout-repair':
     raise SystemExit('Part 34.10.11 latest compile repair evidence identity mismatch')
 obs=latest_compile_repair.get('latest_ci_observations',{})
@@ -568,4 +572,16 @@ for key in ('node_source_changed','node_cpufeatures_patch_changed','node_host_ar
 if latest_ci_throughput_repair.get('post_fix_compile_claim') is not False or latest_ci_throughput_repair.get('external_ci_recompile_required') is not True:
     raise SystemExit('Part 34.10.14 evidence overclaims post-fix compiler proof')
 
-print('Part 34.10.14 Node CI throughput/timeout repair validation PASSED')
+
+feature_manifest=(ROOT/'android/node_runtime/src/main/AndroidManifest.xml').read_text()
+delivery_manager=(ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java').read_text()
+base_gradle=(ROOT/'android/app/build.gradle.kts').read_text()
+settings_gradle=(ROOT/'android/settings.gradle.kts').read_text()
+if '<dist:on-demand />' not in feature_manifest or 'dist:fusing dist:include="false"' not in feature_manifest:
+    raise SystemExit('Part 34.10.15 node feature delivery manifest missing')
+for token in ('SplitInstallManagerFactory.create', '.addModule(MODULE_NAME)', 'bytesDownloaded()', 'totalBytesToDownload()', 'cancelInstall'):
+    need(delivery_manager, token, 'Node Play on-demand delivery manager')
+need(base_gradle, 'dynamicFeatures += setOf(":node_runtime")', 'base dynamic feature registration')
+need(base_gradle, 'com.google.android.play:feature-delivery:2.1.0', 'Play Feature Delivery dependency')
+need(settings_gradle, 'include(":node_runtime")', 'node runtime feature module inclusion')
+print('Part 34.10.15 Node on-demand delivery validation PASSED')

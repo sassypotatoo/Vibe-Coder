@@ -25,7 +25,7 @@ SDK="$("${ADB[@]}" shell getprop ro.build.version.sdk | tr -d '\r')"
 "${ADB[@]}" install -r -t "$APK" >/dev/null
 "${ADB[@]}" shell am force-stop "$PACKAGE" >/dev/null
 "${ADB[@]}" shell run-as "$PACKAGE" rm -f "$REPORT_REL" >/dev/null 2>&1 || true
-if [[ "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" ]]; then
+if [[ "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" ]]; then
   EXTRA_GATEWAY=()
   EXTRA_INFERENCE=()
   if [[ "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" ]]; then
@@ -77,14 +77,14 @@ if mode in ('jcode', 'alpha'):
     keys=('package_presence','arm64_identity','execution','version','unix_socket_round_trip','page_size_16k_compatibility')
     missing=[k for k in keys if j.get(k)!='passed']
     if missing: raise SystemExit(f"jcode_device_proof_incomplete:{missing}")
-if mode in ('node', 'alpha'):
+if mode == 'node':
     n=evidence.get('node') or {}
     keys=('package_presence','arm64_identity','execution','version','page_size_16k_compatibility')
     missing=[k for k in keys if n.get(k)!='passed']
     if missing: raise SystemExit(f"node_device_proof_incomplete:{missing}")
     if n.get('observed_version') != '24.19.0':
         raise SystemExit(f"node_device_version_mismatch:{n.get('observed_version')}")
-if mode == 'omniroute_asset':
+if mode in ('omniroute_asset', 'alpha'):
     omni=report.get('omniroute_asset_installation') or {}
     if omni.get('packaged') is not True: raise SystemExit('omniroute_asset_not_packaged')
     if omni.get('verified') is not True: raise SystemExit(f"omniroute_asset_not_verified:{omni.get('status')}:{omni.get('error','')}")
@@ -92,7 +92,7 @@ if mode == 'omniroute_asset':
         raise SystemExit(f"omniroute_asset_install_status_invalid:{omni.get('status')}")
     if omni.get('service_round_trip_proven') is not False:
         raise SystemExit('omniroute_asset_step_overclaimed_service_proof')
-if mode in ('omniroute_service', 'omniroute_gateway', 'omniroute_inference', 'alpha'):
+if mode in ('omniroute_service', 'omniroute_gateway', 'omniroute_inference'):
     n=evidence.get('node') or {}
     keys=('package_presence','arm64_identity','execution','version','page_size_16k_compatibility')
     missing=[k for k in keys if n.get(k)!='passed']

@@ -220,9 +220,8 @@ jobs:
             "ndk;${ANDROID_NDK_VERSION}" \
             "cmake;${ANDROID_CMAKE_VERSION}"
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.91.0
         with:
-          toolchain: "1.91.0"
           targets: aarch64-linux-android
 
       - uses: gradle/actions/setup-gradle@v6.2.0
@@ -261,95 +260,9 @@ jobs:
             android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_jcode_exec.so
           if-no-files-found: error
           retention-days: 7
-  node-android-proof-build:
-    name: Exact Node 24.19.0 Android cross-compile + APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    steps:
-      - uses: actions/checkout@v6.0.2
-
-      - uses: actions/setup-java@v5.6.0
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - uses: android-actions/setup-android@v4.0.1
-        with:
-          cmdline-tools-version: "15859902"
-          accept-android-sdk-licenses: true
-          log-accepted-android-sdk-licenses: false
-
-      - name: Install pinned Android packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          sdkmanager \
-            "platforms;android-${ANDROID_PLATFORM}" \
-            "build-tools;${ANDROID_BUILD_TOOLS}" \
-            "ndk;${ANDROID_NDK_VERSION}" \
-            "cmake;${ANDROID_CMAKE_VERSION}"
-
-      - uses: dtolnay/rust-toolchain@1.88.0
-        with:
-          targets: aarch64-linux-android
-
-      - uses: gradle/actions/setup-gradle@v6.2.0
-        with:
-          gradle-version: "9.5.0"
-          cache-provider: basic
-
-      - name: Validate source checkpoint before Node build
-        shell: bash
-        run: python3 scripts/validate_checkpoint.py
-
-      - name: Cross-compile exact Node source for Android Bionic
-        shell: bash
-        run: |
-          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
-          export VIBECODER_ANDROID_API="29"
-          export VIBECODER_BUILD_JOBS="4"
-          bash scripts/part34_node_execute_cross_build.sh
-
-      - name: Build and verify APK with evidenced Node candidate
-        shell: bash
-        run: |
-          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
-          bash scripts/part34_node_build_and_verify.sh
-
-      - name: Upload Node APK + cross-build evidence
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: vibecoder-part34-node-android-proof-build
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/vibecoder-part34-node-build-evidence.json
-            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
-            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so
-            android/app/build/outputs/vibecoder-part34-node-configure.log
-            android/app/build/outputs/vibecoder-part34-node-make.log
-            android/app/build/outputs/vibecoder-part34-node-execution.log
-            android/app/build/outputs/vibecoder-part34-node-execution-attempt.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload Node failure logs
-        if: failure()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: vibecoder-part34-node-failure-logs
-          path: |
-            android/app/build/outputs/vibecoder-part34-node-configure.log
-            android/app/build/outputs/vibecoder-part34-node-make.log
-            android/app/build/outputs/vibecoder-part34-node-execution.log
-            android/app/build/outputs/vibecoder-part34-node-execution-attempt.json
-          if-no-files-found: warn
-          retention-days: 7
-
-
-
   full-alpha-package:
-    name: Full Alpha APK (Jcode + Node + OmniRoute)
-    needs: [jcode-android-proof-build, node-android-proof-build]
+    name: Base Alpha APK (Jcode + OmniRoute; Node on-demand)
+    needs: [jcode-android-proof-build]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -395,12 +308,8 @@ jobs:
           name: vibecoder-part31-jcode-diagnostic-apk
           path: ${{ runner.temp }}/jcode-artifact
 
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: vibecoder-part34-node-android-proof-build
-          path: ${{ runner.temp }}/node-artifact
 
-      - name: Stage exact proven Jcode + Node payloads
+      - name: Stage exact proven Jcode payload
         shell: bash
         run: |
           set -euo pipefail
@@ -408,21 +317,11 @@ jobs:
           mkdir -p "$DEST" android/app/build/outputs
           JCODE="$(find "${RUNNER_TEMP}/jcode-artifact" -type f -name libvibecoder_jcode_exec.so -print -quit)"
           JCODE_EVIDENCE="$(find "${RUNNER_TEMP}/jcode-artifact" -type f -name vibecoder-part31-build-evidence.json -print -quit)"
-          NODE="$(find "${RUNNER_TEMP}/node-artifact" -type f -name libvibecoder_node_exec.so -print -quit)"
-          NODE_EVIDENCE="$(find "${RUNNER_TEMP}/node-artifact" -type f -name vibecoder-part34-node-cross-build-evidence.json -print -quit)"
           test -n "$JCODE" -a -s "$JCODE"
           test -n "$JCODE_EVIDENCE" -a -s "$JCODE_EVIDENCE"
-          test -n "$NODE" -a -s "$NODE"
-          test -n "$NODE_EVIDENCE" -a -s "$NODE_EVIDENCE"
           install -m 0644 "$JCODE" "$DEST/libvibecoder_jcode_exec.so"
-          install -m 0644 "$NODE" "$DEST/libvibecoder_node_exec.so"
           install -m 0644 "$JCODE_EVIDENCE" android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
-          install -m 0644 "$NODE_EVIDENCE" android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
           python3 scripts/verify_android_elf.py "$DEST/libvibecoder_jcode_exec.so" >/dev/null
-          python3 scripts/verify_android_elf.py "$DEST/libvibecoder_node_exec.so" >/dev/null
-          python3 scripts/verify_node_cross_build_evidence.py \
-            "$DEST/libvibecoder_node_exec.so" \
-            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
 
       - name: Reproduce exact reviewed OmniRoute archive
         shell: bash
@@ -457,7 +356,6 @@ jobs:
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/vibecoder-part34-alpha-build-evidence.json
             android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
-            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-asset-staging.json
           if-no-files-found: error

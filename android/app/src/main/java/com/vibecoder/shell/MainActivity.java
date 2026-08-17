@@ -3,13 +3,17 @@ package com.vibecoder.shell;
 import android.app.Activity;
 import android.os.Build;
 import android.os.Bundle;
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Typeface;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+
+import com.google.android.play.core.splitcompat.SplitCompat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -43,15 +47,25 @@ public final class MainActivity extends Activity {
     private volatile String activeProjectId;
     private volatile String activeConversationId;
     private AlphaWorkspaceUi alphaWorkspaceUi;
+    private NodeRuntimeDeliveryManager nodeRuntimeManager;
+    private NodeRuntimeSetupUi nodeRuntimeSetupUi;
+    private volatile File nodeExecutableDirectory;
+
+    @Override
+    protected void attachBaseContext(Context newBase) {
+        super.attachBaseContext(newBase);
+        SplitCompat.installActivity(this);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(buildUi());
         if (shouldAutoRunDiagnostics()) {
+            if (nodeRuntimeSetupUi != null) nodeRuntimeSetupUi.hide();
             runDiagnostics();
         } else {
-            startChatRuntime();
+            initializeNodeRuntimeDelivery();
         }
     }
 
@@ -107,7 +121,48 @@ public final class MainActivity extends Activity {
                 stopActiveChatTurn();
             }
         });
-        return alphaWorkspaceUi.root();
+        nodeRuntimeSetupUi = new NodeRuntimeSetupUi(this, new NodeRuntimeSetupUi.Callbacks() {
+            @Override public void onStartSetup() { if (nodeRuntimeManager != null) nodeRuntimeManager.startInstall(); }
+            @Override public void onCancelSetup() { if (nodeRuntimeManager != null) nodeRuntimeManager.cancelInstall(); }
+        });
+        FrameLayout shell = new FrameLayout(this);
+        shell.addView(alphaWorkspaceUi.root(), new FrameLayout.LayoutParams(-1, -1));
+        shell.addView(nodeRuntimeSetupUi.root(), new FrameLayout.LayoutParams(-1, -1));
+        return shell;
+    }
+
+    private void initializeNodeRuntimeDelivery() {
+        nodeRuntimeManager = new NodeRuntimeDeliveryManager(this, state -> runOnUiThread(() -> {
+            if (isDestroyed() || nodeRuntimeSetupUi == null) return;
+            nodeRuntimeSetupUi.render(state);
+            if (state.ready()) {
+                nodeExecutableDirectory = state.executableDirectory;
+                nodeRuntimeSetupUi.hide();
+                startChatRuntime();
+            } else {
+                nodeExecutableDirectory = null;
+                nodeRuntimeSetupUi.show();
+                if (alphaWorkspaceUi != null) alphaWorkspaceUi.setBackendState(false, "Node.js runtime setup required");
+            }
+        }));
+        NodeRuntimeDeliveryManager.State state = nodeRuntimeManager.currentState();
+        nodeRuntimeSetupUi.render(state);
+        if (state.ready()) {
+            nodeExecutableDirectory = state.executableDirectory;
+            nodeRuntimeSetupUi.hide();
+            startChatRuntime();
+        } else {
+            nodeRuntimeSetupUi.show();
+            if (alphaWorkspaceUi != null) alphaWorkspaceUi.setBackendState(false, "Node.js runtime setup required");
+            nodeRuntimeManager.restoreActiveInstall();
+        }
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (nodeRuntimeManager != null) nodeRuntimeManager.onActivityResult(requestCode, resultCode);
     }
 
     private void startChatRuntime() {
@@ -130,11 +185,19 @@ public final class MainActivity extends Activity {
     private RuntimeBootstrapResult bootstrapChatRuntime() {
         try {
             byte[] inventory = readAsset("runtime/android-runtime-inventory.json");
-            ApplicationInfo info = getApplicationInfo();
+            ApplicationInfo info = getPackageManager().getApplicationInfo(getPackageName(), 0);
             if (info.nativeLibraryDir == null || info.nativeLibraryDir.isEmpty()) {
                 return RuntimeBootstrapResult.failed("AI runtime unavailable · native library directory missing");
             }
             File nativeRoot = new File(info.nativeLibraryDir).getCanonicalFile();
+            if (nodeExecutableDirectory == null) {
+                return RuntimeBootstrapResult.failed("AI runtime unavailable · Node.js runtime not installed");
+            }
+            File nodeRoot = nodeExecutableDirectory.getCanonicalFile();
+            File nodeExecutable = new File(nodeRoot, NodeRuntimeDeliveryManager.NODE_FILE_NAME).getCanonicalFile();
+            if (!nodeExecutable.getParentFile().equals(nodeRoot) || !nodeExecutable.isFile() || !nodeExecutable.canExecute()) {
+                return RuntimeBootstrapResult.failed("AI runtime unavailable · Node.js runtime not installed");
+            }
             OmniRouteAssetInstaller.Result asset = OmniRouteAssetInstaller.ensureInstalled(
                     getAssets(), getFilesDir());
             if (!asset.packaged) {
@@ -147,7 +210,7 @@ public final class MainActivity extends Activity {
             JSONObject service = new JSONObject(NativeBridge.nativeOmniRouteStart(
                     getFilesDir().getCanonicalPath(),
                     nativeRoot.getCanonicalPath(),
-                    nativeRoot.getCanonicalPath(),
+                    nodeRoot.getCanonicalPath(),
                     inventory,
                     asset.manifestSha256));
             if (!service.optBoolean("active", false)
@@ -164,7 +227,7 @@ public final class MainActivity extends Activity {
                 controller = new JSONObject(NativeBridge.nativeAppControllerInit(
                         getFilesDir().getCanonicalPath(),
                         nativeRoot.getCanonicalPath(),
-                        nativeRoot.getCanonicalPath(),
+                        nodeRoot.getCanonicalPath(),
                         inventory));
                 if (controller.optBoolean("chat_ready", false)
                         && controller.optBoolean("runtime_profile_verified", false)
@@ -442,17 +505,17 @@ public final class MainActivity extends Activity {
             if (info.nativeLibraryDir == null || info.nativeLibraryDir.isEmpty()) {
                 throw new IllegalStateException("native_library_dir_missing");
             }
-            File nativeRoot = new File(info.nativeLibraryDir);
+            File nativeRoot = new File(info.nativeLibraryDir).getCanonicalFile();
+            File installedNodeRoot = resolveInstalledNodeDirectory();
+            // Base-only diagnostic APKs intentionally have no Node split. Supplying the base root
+            // keeps the probe fail-closed for Node without inventing a writable fallback path.
+            File packagedExecutableRoot = installedNodeRoot == null ? nativeRoot : installedNodeRoot;
             byte[] assetEvidence = buildApkAssetEvidence(inventory);
             JSONObject omniRouteAssetState = collectOmniRouteAssetState();
-            // The same package-owned directory is intentionally supplied for JNI libraries and
-            // child-process executables only because build.gradle.kts enforces
-            // packaging.jniLibs.useLegacyPackaging = true. If that packaging contract changes,
-            // these roots must be resolved independently instead of silently reusing this path.
             String snapshot = NativeBridge.nativeProbeSnapshot(
                     getFilesDir().getCanonicalPath(),
                     nativeRoot.getCanonicalPath(),
-                    nativeRoot.getCanonicalPath(),
+                    packagedExecutableRoot.getCanonicalPath(),
                     inventory,
                     assetEvidence);
 
@@ -460,6 +523,7 @@ public final class MainActivity extends Activity {
             JSONObject omniRouteServiceState = collectOmniRouteServiceState(
                     inventory,
                     nativeRoot,
+                    installedNodeRoot,
                     omniRouteAssetState);
             JSONObject omniRouteGatewayState = omniRouteServiceState == null
                     ? null
@@ -506,8 +570,9 @@ public final class MainActivity extends Activity {
                     "SDK: " + Build.VERSION.SDK_INT + "\n" +
                     "ABIs: " + Arrays.toString(Build.SUPPORTED_ABIS) + "\n" +
                     "filesDir: " + getFilesDir() + "\n" +
-                    "nativeLibraryDir: " + nativeRoot + "\n\n" +
-                    expectedPayloads(nativeRoot) +
+                    "nativeLibraryDir: " + nativeRoot + "\n" +
+                    "nodeExecutableDir: " + (installedNodeRoot == null ? "not installed" : installedNodeRoot) + "\n\n" +
+                    expectedPayloads(nativeRoot, installedNodeRoot) +
                     "\n\nOmniRoute asset state:\n" + omniRouteAssetState.toString(2) +
                     (omniRouteServiceState == null
                             ? ""
@@ -535,6 +600,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (nodeRuntimeManager != null) {
+            nodeRuntimeManager.close();
+            nodeRuntimeManager = null;
+        }
         if (alphaWorkspaceUi != null) {
             alphaWorkspaceUi.destroy();
             alphaWorkspaceUi = null;
@@ -559,21 +628,48 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private String expectedPayloads(File root) {
+    private String expectedPayloads(File baseRoot, File nodeRoot) {
         String[] names = {
                 "libvibecoder_android_host.so",
                 "libvibecoder_jcode_exec.so",
-                "libvibecoder_node_exec.so",
                 "libvibecoder_java_exec.so",
                 "libvibecoder_aapt2_exec.so",
                 "libvibecoder_zipalign_exec.so"
         };
-        StringBuilder out = new StringBuilder("Packaged native payloads:\n");
+        StringBuilder out = new StringBuilder("Base packaged native payloads:\n");
         for (String name : names) {
-            File candidate = new File(root, name);
+            File candidate = new File(baseRoot, name);
             out.append(candidate.isFile() ? "✅ " : "❌ ").append(name).append('\n');
         }
+        File node = nodeRoot == null ? null : new File(nodeRoot, NodeRuntimeDeliveryManager.NODE_FILE_NAME);
+        out.append("On-demand Node payload:\n")
+                .append(node != null && node.isFile() ? "✅ " : "⬇ ")
+                .append(NodeRuntimeDeliveryManager.NODE_FILE_NAME)
+                .append(nodeRoot == null ? " (not installed)" : "")
+                .append('\n');
         return out.toString();
+    }
+
+    private File resolveInstalledNodeDirectory() {
+        if (nodeExecutableDirectory != null) {
+            return nodeExecutableDirectory;
+        }
+        NodeRuntimeDeliveryManager manager = nodeRuntimeManager;
+        boolean temporary = false;
+        if (manager == null) {
+            manager = new NodeRuntimeDeliveryManager(this, state -> { });
+            temporary = true;
+        }
+        try {
+            NodeRuntimeDeliveryManager.State state = manager.currentState();
+            if (state.ready()) {
+                nodeExecutableDirectory = state.executableDirectory;
+                return state.executableDirectory;
+            }
+            return null;
+        } finally {
+            if (temporary) manager.close();
+        }
     }
 
     private JSONObject collectOmniRouteAssetState() {
@@ -601,6 +697,7 @@ public final class MainActivity extends Activity {
     private JSONObject collectOmniRouteServiceState(
             byte[] inventory,
             File nativeRoot,
+            File nodeRoot,
             JSONObject assetState) {
         if (!getIntent().getBooleanExtra("vibecoder_omniroute_service_test", false)) {
             return null;
@@ -612,6 +709,10 @@ public final class MainActivity extends Activity {
             failed.put("active", false);
             failed.put("ready", false);
             failed.put("runtime_profile_round_trip_proven", false);
+            if (nodeRoot == null) {
+                failed.put("error", "node_runtime_not_installed");
+                return failed;
+            }
             if (!assetState.optBoolean("verified", false)) {
                 failed.put("error", "omniroute_asset_not_verified");
                 return failed;
@@ -624,7 +725,7 @@ public final class MainActivity extends Activity {
             String response = NativeBridge.nativeOmniRouteStart(
                     getFilesDir().getCanonicalPath(),
                     nativeRoot.getCanonicalPath(),
-                    nativeRoot.getCanonicalPath(),
+                    nodeRoot.getCanonicalPath(),
                     inventory,
                     manifestSha256);
             JSONObject state = new JSONObject(response);

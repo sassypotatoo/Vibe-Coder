@@ -31,7 +31,7 @@ done
 if [[ "$MODE" == "jcode" || "$MODE" == "alpha" ]]; then
   printf '%s\n' "${NATIVE_ENTRIES[@]}" | grep -Fxq 'lib/arm64-v8a/libvibecoder_jcode_exec.so' || fail "jcode_native_entry_missing"
 fi
-if [[ "$MODE" == "node" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" ]]; then
+if [[ "$MODE" == "node" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" ]]; then
   printf '%s\n' "${NATIVE_ENTRIES[@]}" | grep -Fxq 'lib/arm64-v8a/libvibecoder_node_exec.so' || fail "node_native_entry_missing"
 fi
 TMP="$(mktemp -d)"

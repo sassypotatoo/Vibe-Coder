@@ -168,6 +168,8 @@ def parse_toml(path: Path) -> dict:
 GENERATED_PATH_PREFIXES = (
     "android/app/build/",
     "android/app/.cxx/",
+    "android/node_runtime/build/",
+    "android/node_runtime/.cxx/",
     "target/",
     ".toolchains/",
     ".gradle/",
@@ -3269,7 +3271,7 @@ def check_part26_android_runtime_packaging() -> None:
         "runtime_16k_page_compatibility_unproven",
         "pub fn backend_ready(&self) -> bool",
         "RuntimeArtifactKind::NativeExecutable",
-        "component.placement != RuntimePlacement::ApkNativeExecutable",
+        "RuntimePlacement::PlayFeatureNativeExecutable",
     ):
         if token not in source:
             fail(f"Part 26 readiness boundary missing: {token}")
@@ -3497,8 +3499,10 @@ def check_part28_android_shell() -> None:
         fail("Part 28 Node source SHA-256 drifted")
     if node.get("source_url") != "https://nodejs.org/download/release/v24.19.0/node-v24.19.0.tar.xz":
         fail("Part 28 Node source URL drifted")
-    if node.get("status") != "source_build_required_android_experimental":
-        fail("Part 28 Node Android status must remain experimental/unproven")
+    if node.get("status") != "play_feature_staged_at_bundle_build":
+        fail("Part 28/34 Node provisioning status must reflect on-demand Play feature staging")
+    if node.get("delivery") != "play_feature_on_demand" or node.get("module") != "node_runtime":
+        fail("Part 34.10.15 Node Play feature delivery identity drifted")
     omni = payloads.get("omniroute", {})
     if omni.get("version") != "3.8.50" or omni.get("sha256") != EXPECTED_OMNIROUTE_ARCHIVE:
         fail("Part 28 OmniRoute reviewed archive identity drifted")
@@ -3704,6 +3708,8 @@ def check_part29_jcode_android_packaging() -> None:
     elf_verify = read("scripts/verify_android_elf.py")
     native_probe = read("crates/vibecoder-runtime-packaging/src/native_probe.rs")
     workflow = read(".github/workflows/android-diagnostic-apk.yml")
+    node_runtime_workflow = read(".github/workflows/node-runtime-proof.yml")
+    combined_workflows = workflow + "\n" + node_runtime_workflow
     app_gradle = read("android/app/build.gradle.kts")
     main_activity = read("android/app/src/main/java/com/vibecoder/shell/MainActivity.java")
 
@@ -3762,10 +3768,10 @@ def check_part29_jcode_android_packaging() -> None:
     ):
         if token not in workflow:
             fail(f"Part 29 GitHub Actions Android proof contract missing: {token}")
-    if workflow.count('uses: dtolnay/rust-toolchain@1.88.0') != 2:
-        fail("Part 29/34 CI does not pin Rust 1.88.0 for exactly the minimal + Node lanes")
-    if 'toolchain: "1.91.0"' not in workflow:
-        fail("Part 29 CI does not pin Rust 1.91.0 for the Jcode lane")
+    if combined_workflows.count('uses: dtolnay/rust-toolchain@1.88.0') != 2:
+        fail("Part 29/34 CI does not pin Rust 1.88.0 for exactly the minimal + dedicated Node lanes")
+    if 'uses: dtolnay/rust-toolchain@1.91.0' not in workflow:
+        fail("Part 29 CI does not pin Rust 1.91.0 exactly for the Jcode lane")
     code_match = re.search(r"versionCode\s*=\s*(\d+)", app_gradle)
     if code_match is None or int(code_match.group(1)) < 29:
         fail("Part 29 diagnostic shell version baseline regressed")
@@ -3882,6 +3888,8 @@ def check_part30_android_device_proof() -> None:
 
 def check_part31_first_android_apk() -> None:
     workflow = read(".github/workflows/android-diagnostic-apk.yml")
+    node_runtime_workflow = read(".github/workflows/node-runtime-proof.yml")
+    combined_workflows = workflow + "\n" + node_runtime_workflow
     build_lane = read("scripts/part31_build_and_verify.sh")
     evidence = read("scripts/write_android_build_evidence.py")
     signing_config = json.loads(read("config/android-diagnostic-signing.json"))
@@ -3893,8 +3901,8 @@ def check_part31_first_android_apk() -> None:
     security = read("docs/SECURITY_INVARIANTS.md")
 
     # The reviewed command-line-tools identity must be the one CI actually installs.
-    if workflow.count('cmdline-tools-version: "15859902"') != 4:
-        fail("Part 31/34 CI does not pin command-line-tools 15859902 in all four Android build jobs")
+    if combined_workflows.count('cmdline-tools-version: "15859902"') != 4:
+        fail("Part 31/34 CI does not pin command-line-tools 15859902 across the three app jobs plus dedicated Node runtime job")
     for token in (
         'accept-android-sdk-licenses: true',
         'log-accepted-android-sdk-licenses: false',
@@ -3906,7 +3914,7 @@ def check_part31_first_android_apk() -> None:
         'config/android-diagnostic-signing.json',
         'push:',
         'pull_request:',
-        'toolchain: "1.91.0"',
+        'uses: dtolnay/rust-toolchain@1.91.0',
     ):
         if token not in workflow:
             fail(f"Part 31 CI build/evidence contract missing: {token}")
@@ -4063,6 +4071,7 @@ def check_part34_2_node_staging_lane() -> None:
     attempt_evidence = read("docs/evidence/part34_2_3_current_runner_execution.json")
     attempt_log = read("docs/evidence/part34_2_3_current_runner_execution.log")
     workflow = read(".github/workflows/android-diagnostic-apk.yml")
+    node_runtime_workflow = read(".github/workflows/node-runtime-proof.yml")
     doc = read("docs/PART34_2_NODE_RUNTIME_AUDIT.md")
     ledger = read("docs/PROGRESS_LEDGER.md")
     state = json.loads(read("PROJECT_STATE.json"))
@@ -4326,29 +4335,26 @@ def check_part34_2_node_staging_lane() -> None:
     if local_attempt.get('execution_log_sha256') != expected_attempt_log_sha:
         fail("Part 34.2.3 preserved local execution log hash mismatch")
 
-    # CI must be capable of producing the first real compiler/linker evidence and preserving logs on
-    # failure. Keep it on the same project-wide NDK/API identity as the Android shell.
+    # The expensive Node source build is isolated from normal app CI. It remains manually
+    # reproducible and preserves compiler/configure logs for the reusable runtime artifact.
     for token in (
         'ANDROID_NDK_VERSION: "28.2.13676358"',
         'VIBECODER_ANDROID_API: "29"',
         'node-android-proof-build:',
-        'Exact Node 24.19.0 Android cross-compile + APK',
-        '- "scripts/part34_node_execute_cross_build.sh"',
-        '- "scripts/write_node_cross_build_attempt.py"',
-        '- "scripts/bootstrap_pinned_android_ndk_r28c.sh"',
+        'Exact Node 24.19.0 Android cross-compile',
         'export VIBECODER_BUILD_JOBS="4"',
         'bash scripts/part34_node_execute_cross_build.sh',
-        'bash scripts/part34_node_build_and_verify.sh',
-        'vibecoder-part34-node-execution-attempt.json',
-        'vibecoder-part34-node-execution.log',
         'vibecoder-part34-node-cross-build-evidence.json',
         'vibecoder-part34-node-configure.log',
         'vibecoder-part34-node-make.log',
-        'name: vibecoder-part34-node-failure-logs',
+        'name: vibecoder-node-24.19.0-android-arm64',
         'if: failure()',
+        'name: vibecoder-node-24.19.0-failure-logs',
     ):
-        if token not in workflow:
-            fail(f"Part 34.2.3 Node CI execution contract missing: {token}")
+        if token not in node_runtime_workflow:
+            fail(f"Part 34.2.3 dedicated Node CI execution contract missing: {token}")
+    if 'node-android-proof-build:' in workflow:
+        fail("Part 34.10.15 normal app CI must not rebuild Node on every commit")
 
     part = state.get('part34_2_node_runtime', {})
     expected = {
@@ -4400,6 +4406,7 @@ def check_part31_review_fixes() -> None:
     bridge = read("android/app/src/main/cpp/native_bridge.c")
     native_java = read("android/app/src/main/java/com/vibecoder/shell/NativeBridge.java")
     main_activity = read("android/app/src/main/java/com/vibecoder/shell/MainActivity.java")
+    app_build = read("android/app/build.gradle.kts")
     build_shell = read("scripts/build_android_shell.sh")
     host_build = read("scripts/build_android_host.sh")
     jcode_build = read("scripts/build_jcode_android.sh")
@@ -4467,10 +4474,18 @@ def check_part31_review_fixes() -> None:
         'buildApkAssetEvidence(inventory)',
         'assetPathExists(relativePath)',
         'assetPathExists(relativePath) ? "passed" : "failed"',
-        'packaging.jniLibs.useLegacyPackaging = true',
     ):
         if token not in main_activity:
-            fail(f"Reviewed Android asset/packaging evidence repair missing: {token}")
+            fail(f"Reviewed Android asset evidence repair missing: {token}")
+    if 'useLegacyPackaging = true' not in app_build:
+        fail("Reviewed Android native/executable packaging contract missing from app Gradle config")
+    for token in (
+        'File installedNodeRoot = resolveInstalledNodeDirectory();',
+        'File packagedExecutableRoot = installedNodeRoot == null ? nativeRoot : installedNodeRoot;',
+        'packagedExecutableRoot.getCanonicalPath()',
+    ):
+        if token not in main_activity:
+            fail(f"Reviewed Android base/feature executable-root separation missing: {token}")
 
     for token in (
         'verified_gradle_wrapper_incomplete_run_scripts_bootstrap_gradle_wrapper_sh',

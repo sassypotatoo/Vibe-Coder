@@ -671,7 +671,7 @@
     "full_alpha_apk_compiled": false,
     "full_alpha_build_lane_ready": true,
     "full_alpha_package_verified": false,
-    "full_alpha_requires_jcode_node_omniroute_same_apk": true,
+    "full_alpha_requires_jcode_node_omniroute_same_apk": false,
     "gateway_chat_test_only_import_warning_fixed": true,
     "jcode_diagnostic_apk_full_chat_expected": false,
     "latest_ci_android_renameat2_flags_type_error_observed": true,
@@ -760,8 +760,8 @@
     "selected_model_from_fresh_exact_catalog": true,
     "send_controller_jni_wired": true,
     "send_unicode_safe_jni_decode": true,
-    "status": "node_ci_throughput_timeout_recompile_pending",
-    "step": "34.10.14-node-ci-throughput-timeout-repair",
+    "status": "node_on_demand_delivery_source_ready_play_bundle_device_proof_pending",
+    "step": "34.10.15-node-on-demand-delivery",
     "stop_controller_jni_wired": true,
     "strict_java_ci_gate": true,
     "strict_java_stub_compile_proven_in_audit_runner": true,
@@ -770,7 +770,12 @@
     "latest_ci_node_canceled_by_240_minute_timeout": true,
     "latest_ci_node_active_compile_at_cancel": true,
     "latest_ci_node_sanitizer_clean_noop_passed": true,
-    "node_ci_build_jobs": 4
+    "node_ci_build_jobs": 4,
+    "node_delivery": "play_feature_on_demand",
+    "node_base_apk_bundled": false,
+    "node_runtime_feature_module": "node_runtime",
+    "node_compile_on_normal_commit": false,
+    "node_runtime_play_delivery_device_proven": false
   },
   "part34_2_node_runtime": {
     "android_abi": "arm64-v8a",
@@ -1133,5 +1138,13 @@
     "text_patch_rechecks_target_before_commit": true,
     "untrusted_concurrent_same_uid_filesystem_mutator_isolated": false,
     "workspace_spec_serializable": false
-  }
+  },
+  "status": "node_on_demand_delivery_source_ready_play_bundle_device_proof_pending",
+  "step": "34.10.15-node-on-demand-delivery",
+  "node_delivery": "play_feature_on_demand",
+  "node_base_apk_bundled": false,
+  "node_runtime_feature_module": "node_runtime",
+  "node_compile_on_normal_commit": false,
+  "node_runtime_play_delivery_device_proven": false,
+  "node_runtime_direct_writable_download_forbidden": true
 }

@@ -268,11 +268,11 @@ pub struct AndroidHostPaths {
 impl AndroidHostPaths {
     /// Construct Android roots supplied by the future Kotlin/Android shell.
     ///
-    /// `native_library_dir` is the platform JNI-library location used for the in-process host
-    /// library. `packaged_executable_dir` is a package-owned filesystem directory whose native
-    /// files are actually available to `execve()`. They are deliberately separate concepts:
-    /// modern Android packaging may load uncompressed JNI libraries directly from the APK instead
-    /// of extracting every library to an ordinary filesystem file.
+    /// `native_library_dir` is the package-owned base native-library location. Base-delivered
+    /// native executables such as Jcode resolve there as well. `packaged_executable_dir` is the
+    /// trusted package-owned execution root for Play-feature-delivered executables such as Node.
+    /// Before an optional feature is installed the shell may pass the base native directory for
+    /// both roots; normal chat startup supplies the installed Node feature root explicitly.
     pub fn new(
         app_private_dir: impl AsRef<Path>,
         native_library_dir: impl AsRef<Path>,
@@ -379,10 +379,10 @@ impl std::fmt::Debug for AndroidHostRuntime {
 impl AndroidHostRuntime {
     /// Initialize the UI-free Android host from platform-owned roots.
     ///
-    /// The Android shell must provide both its JNI-library directory and a package-owned filesystem
-    /// directory containing child-process executables. No fallback to PATH, filesDir, cacheDir, or
-    /// a copied writable executable is permitted. The two package code directories may be equal
-    /// only when the installer/build layout actually exposes the native payload as ordinary files.
+    /// The Android shell provides its base native-library directory plus the package-owned
+    /// executable root used by on-demand runtime modules. No fallback to PATH, filesDir, cacheDir,
+    /// or copied writable code is permitted. Base native executables remain anchored to the base
+    /// native-library directory; Play-feature executables resolve only from the feature root.
     pub fn initialize(
         paths: AndroidHostPaths,
         inventory: AndroidArm64RuntimeInventory,
@@ -467,7 +467,9 @@ impl AndroidHostRuntime {
                 | RuntimeArtifactKind::NativeLibrary
         ) || !matches!(
             component.placement,
-            RuntimePlacement::ApkNativeLibrary | RuntimePlacement::ApkNativeExecutable
+            RuntimePlacement::ApkNativeLibrary
+                | RuntimePlacement::ApkNativeExecutable
+                | RuntimePlacement::PlayFeatureNativeExecutable
         ) {
             return Err(host_error("android_host_component_not_native"));
         }
@@ -493,7 +495,11 @@ impl AndroidHostRuntime {
             RuntimeArtifactKind::InProcessNative | RuntimeArtifactKind::NativeLibrary => {
                 self.paths.native_library_dir()
             }
-            RuntimeArtifactKind::NativeExecutable => self.paths.packaged_executable_dir(),
+            RuntimeArtifactKind::NativeExecutable => match component.placement {
+                RuntimePlacement::ApkNativeExecutable => self.paths.native_library_dir(),
+                RuntimePlacement::PlayFeatureNativeExecutable => self.paths.packaged_executable_dir(),
+                _ => return Err(host_error("android_host_native_executable_placement_invalid")),
+            },
             _ => return Err(host_error("android_host_component_not_native")),
         };
         Ok((root, root.join(relative)))
@@ -696,7 +702,7 @@ fn required_component<'a>(
 
 fn native_executable_relative_path(component: &RuntimeComponentSpec) -> Result<PathBuf> {
     if component.artifact_kind != RuntimeArtifactKind::NativeExecutable
-        || component.placement != RuntimePlacement::ApkNativeExecutable
+        || !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::PlayFeatureNativeExecutable)
     {
         return Err(host_error("android_host_runtime_tool_not_native_executable"));
     }
@@ -830,7 +836,7 @@ mod tests {
     #[test]
     fn jcode_private_config_uses_explicit_package_binary_not_path() {
         let (root, app, native, exec) = temp_host_roots("jcode");
-        let expected = exec.join("libvibecoder_jcode_exec.so");
+        let expected = native.join("libvibecoder_jcode_exec.so");
         fs::write(&expected, b"test-only-placeholder").expect("jcode placeholder");
         let paths = AndroidHostPaths::new(&app, &native, &exec).expect("paths");
         let inventory = AndroidArm64RuntimeInventory::from_json(include_bytes!(
@@ -849,6 +855,25 @@ mod tests {
             }
             JcodeConnectionMode::Shared { .. } => panic!("Android host unexpectedly chose shared Jcode"),
         }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn node_play_feature_resolves_from_feature_root_not_base_native_root() {
+        let (root, app, native, exec) = temp_host_roots("node-feature-root");
+        let expected = exec.join("libvibecoder_node_exec.so");
+        fs::write(&expected, b"test-only-placeholder").expect("node placeholder");
+        let paths = AndroidHostPaths::new(&app, &native, &exec).expect("paths");
+        let inventory = AndroidArm64RuntimeInventory::from_json(include_bytes!(
+            "../../../config/android-runtime-inventory.json"
+        ))
+        .expect("inventory");
+        let host = AndroidHostRuntime::initialize(paths, inventory).expect("host");
+        assert_eq!(
+            host.native_component_path(NODE_COMPONENT_ID).expect("Node feature path"),
+            expected
+        );
         let _ = fs::remove_dir_all(root);
     }
 

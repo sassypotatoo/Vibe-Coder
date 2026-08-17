@@ -14,7 +14,6 @@ with tempfile.TemporaryDirectory(prefix='vibecoder-alpha-evidence-test-') as td:
         'lib/arm64-v8a/libvibecoder_shell_jni.so':b'jni-fixture',
         'lib/arm64-v8a/libvibecoder_android_host.so':b'host-fixture',
         'lib/arm64-v8a/libvibecoder_jcode_exec.so':b'jcode-fixture',
-        'lib/arm64-v8a/libvibecoder_node_exec.so':b'node-fixture',
     }
     omni={'component_id':'omniroute','version':'3.8.50','profile_id':'vibecoder-omniroute-android-backend-v1',
           'tree_sha256':'0'*64,'file_count':1,'total_bytes':1}
@@ -28,22 +27,21 @@ with tempfile.TemporaryDirectory(prefix='vibecoder-alpha-evidence-test-') as td:
         'native_entries':[{'entry':'lib/arm64-v8a/libvibecoder_jcode_exec.so','size':len(payloads['lib/arm64-v8a/libvibecoder_jcode_exec.so']),'sha256':sha(payloads['lib/arm64-v8a/libvibecoder_jcode_exec.so'])}],
         'source':{'checksums_sha256':source_sha},
     }
-    node={'node':{'version':'24.19.0','output_sha256':sha(payloads['lib/arm64-v8a/libvibecoder_node_exec.so']),'output_size':len(payloads['lib/arm64-v8a/libvibecoder_node_exec.so'])},
-          'target':{'os':'android','abi':'arm64-v8a','libc':'bionic'}}
-    jp=tmp/'jcode.json'; np=tmp/'node.json'; out=tmp/'out.json'
-    jp.write_text(json.dumps(jcode)); np.write_text(json.dumps(node))
-    ok=run([sys.executable,str(WRITER),str(apk),str(jp),str(np),str(out)])
+    jp=tmp/'jcode.json'; out=tmp/'out.json'
+    jp.write_text(json.dumps(jcode))
+    ok=run([sys.executable,str(WRITER),str(apk),str(jp),str(out)])
     if ok.returncode != 0: raise SystemExit(f'alpha_evidence_success_fixture_failed:{ok.stdout}')
     evidence=json.loads(out.read_text())
     assert evidence['jcode']['payload_bound_to_proof_evidence'] is True
-    assert evidence['node']['payload_bound_to_cross_build_evidence'] is True
+    assert evidence['node']['delivery'] == 'play_feature_on_demand'
+    assert evidence['node']['bundled_in_base_apk'] is False
     assert evidence['jcode']['device_execution_proven'] is False
     assert evidence['node']['device_execution_proven'] is False
     assert evidence['omniroute']['device_service_round_trip_proven'] is False
 
     jcode['native_entries'][0]['sha256']='f'*64
     bad=tmp/'jcode-bad.json'; bad.write_text(json.dumps(jcode))
-    rejected=run([sys.executable,str(WRITER),str(apk),str(bad),str(np),str(tmp/'bad.json')])
+    rejected=run([sys.executable,str(WRITER),str(apk),str(bad),str(tmp/'bad.json')])
     if rejected.returncode == 0 or 'jcode_build_evidence_payload_mismatch' not in rejected.stdout:
         raise SystemExit(f'alpha_evidence_tampered_jcode_not_rejected:{rejected.stdout}')
 

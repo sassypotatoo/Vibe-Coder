@@ -1,9 +1,12 @@
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     id("com.android.application")
 }
 
 android {
     namespace = "com.vibecoder.shell"
+    dynamicFeatures += setOf(":node_runtime")
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -76,4 +79,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation("com.google.android.play:feature-delivery:2.1.0")
+}
+
+// Compile the real Android source against its resolved Play Feature Delivery dependency.
+// Keep warnings fatal so the old standalone javac gate remains a real compile contract.
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))
 }

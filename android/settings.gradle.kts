@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "VibeCoderAndroidShell"
 include(":app")
+include(":node_runtime")

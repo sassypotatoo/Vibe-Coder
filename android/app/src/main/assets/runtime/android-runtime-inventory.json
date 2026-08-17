@@ -36,7 +36,7 @@
       "component_id": "node",
       "version_requirement": "24.19.0",
       "artifact_kind": "native_executable",
-      "placement": "apk_native_executable",
+      "placement": "play_feature_native_executable",
       "relative_path": "libvibecoder_node_exec.so",
       "required_for": [
         "gateway",
@@ -45,7 +45,9 @@
       "requires_exec_probe": true,
       "requires_version_probe": true,
       "requires_16k_page_compatibility": true,
-      "version_requirement_pinned": true
+      "version_requirement_pinned": true,
+      "delivery_module": "node_runtime",
+      "bundled_in_base": false
     },
     {
       "component_id": "omniroute",

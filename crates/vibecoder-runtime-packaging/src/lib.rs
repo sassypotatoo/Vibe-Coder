@@ -53,6 +53,9 @@ pub enum RuntimePlacement {
     ApkNativeLibrary,
     /// A package-installed native file that the Android adapter intends to invoke as a process.
     ApkNativeExecutable,
+    /// Native executable delivered by a Google Play on-demand feature split. It remains package
+    /// installed code and must never be copied into writable app data for execution.
+    PlayFeatureNativeExecutable,
     /// Non-executable bytes shipped with the app and optionally materialized as data.
     ApkAsset,
     /// Writable app-private data. Never valid for native code or a process executable.
@@ -69,6 +72,10 @@ pub struct RuntimeComponentSpec {
     pub version_requirement_pinned: bool,
     pub artifact_kind: RuntimeArtifactKind,
     pub placement: RuntimePlacement,
+    #[serde(default)]
+    pub delivery_module: Option<String>,
+    #[serde(default)]
+    pub bundled_in_base: Option<bool>,
     #[serde(default)]
     pub relative_path: Option<PathBuf>,
     pub required_for: Vec<RuntimeCapability>,
@@ -387,12 +394,18 @@ fn validate_component(component: &RuntimeComponentSpec) -> Result<()> {
             }
         }
         RuntimeArtifactKind::NativeExecutable => {
-            if component.placement != RuntimePlacement::ApkNativeExecutable
+            if !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::PlayFeatureNativeExecutable)
                 || component.relative_path.is_none()
                 || !component.requires_exec_probe
                 || !component.requires_16k_page_compatibility
             {
                 return Err(packaging_error("runtime_native_executable_placement_invalid"));
+            }
+            if component.placement == RuntimePlacement::PlayFeatureNativeExecutable {
+                let module = component.delivery_module.as_deref().unwrap_or("");
+                if module.is_empty() || module.len() > 128 || component.bundled_in_base != Some(false) {
+                    return Err(packaging_error("runtime_play_feature_delivery_invalid"));
+                }
             }
         }
         RuntimeArtifactKind::DataBundle | RuntimeArtifactKind::JavaArchive => {
@@ -519,6 +532,8 @@ mod tests {
                     version_requirement_pinned: true,
                     artifact_kind: RuntimeArtifactKind::InProcessNative,
                     placement: RuntimePlacement::ApkNativeLibrary,
+                    delivery_module: None,
+                    bundled_in_base: None,
                     relative_path: Some("libvibecoder_android_host.so".into()),
                     required_for: vec![RuntimeCapability::Core],
                     requires_exec_probe: false,
@@ -534,6 +549,8 @@ mod tests {
                     version_requirement_pinned: true,
                     artifact_kind: RuntimeArtifactKind::NativeExecutable,
                     placement: RuntimePlacement::ApkNativeExecutable,
+                    delivery_module: None,
+                    bundled_in_base: None,
                     relative_path: Some("libvibecoder_jcode_exec.so".into()),
                     required_for: vec![RuntimeCapability::Agent],
                     requires_exec_probe: true,
@@ -548,7 +565,9 @@ mod tests {
                     version_requirement: ">=22.22.2 <23 || >=24.0.0 <27".into(),
                     version_requirement_pinned: true,
                     artifact_kind: RuntimeArtifactKind::NativeExecutable,
-                    placement: RuntimePlacement::ApkNativeExecutable,
+                    placement: RuntimePlacement::PlayFeatureNativeExecutable,
+                    delivery_module: Some("node_runtime".into()),
+                    bundled_in_base: Some(false),
                     relative_path: Some("libvibecoder_node_exec.so".into()),
                     required_for: vec![RuntimeCapability::Gateway, RuntimeCapability::WebsiteBuild],
                     requires_exec_probe: true,
@@ -564,6 +583,8 @@ mod tests {
                     version_requirement_pinned: true,
                     artifact_kind: RuntimeArtifactKind::DataBundle,
                     placement: RuntimePlacement::ApkAsset,
+                    delivery_module: None,
+                    bundled_in_base: None,
                     relative_path: Some("omniroute/".into()),
                     required_for: vec![RuntimeCapability::Gateway],
                     requires_exec_probe: false,
@@ -579,6 +600,8 @@ mod tests {
                     version_requirement_pinned: true,
                     artifact_kind: RuntimeArtifactKind::DataBundle,
                     placement: RuntimePlacement::ApkAsset,
+                    delivery_module: None,
+                    bundled_in_base: None,
                     relative_path: Some("node/npm".into()),
                     required_for: vec![RuntimeCapability::WebsiteBuild],
                     requires_exec_probe: false,
@@ -594,6 +617,8 @@ mod tests {
                     version_requirement_pinned: true,
                     artifact_kind: RuntimeArtifactKind::NativeExecutable,
                     placement: RuntimePlacement::ApkNativeExecutable,
+                    delivery_module: None,
+                    bundled_in_base: None,
                     relative_path: Some("libvibecoder_java_exec.so".into()),
                     required_for: vec![RuntimeCapability::AndroidBuild],
                     requires_exec_probe: true,
