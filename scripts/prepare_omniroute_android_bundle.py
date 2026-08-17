@@ -19,6 +19,7 @@ from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE_PATH = ROOT / "config" / "omniroute-android-runtime-profile.json"
 MANIFEST_NAME = ".vibecoder-omniroute-bundle.json"
+OMNIROUTE_REPO_OUTPUT = ROOT / "android" / "app" / "build" / "generated" / "omnirouteBundle"
 
 
 def sha256_file(path: Path) -> str:
@@ -39,13 +40,41 @@ def load_profile() -> dict:
 
 
 def safe_output(output: Path, source: Path) -> Path:
-    if output.is_symlink():
+    # Keep repository source/config immutable while admitting the one generated
+    # destination this producer is explicitly responsible for.  The Alpha and
+    # Play lanes both seal to android/app/build/generated/omnirouteBundle.
+    # Anything else inside the repository remains fail-closed.
+    expanded = output.expanduser()
+    if expanded.is_symlink():
         raise SystemExit("omniroute_bundle_output_symlink_forbidden")
-    resolved = output.resolve(strict=False)
+
+    lexical = expanded.absolute()
+    repo_lexical = ROOT.absolute()
+    admitted_lexical = OMNIROUTE_REPO_OUTPUT.absolute()
+
+    if lexical == repo_lexical or repo_lexical in lexical.parents:
+        if lexical != admitted_lexical:
+            raise SystemExit("omniroute_bundle_output_protected")
+
+        # Do not let an existing parent symlink redirect the admitted generated
+        # destination outside android/app/build/generated.  Check lexical path
+        # components before resolve(), otherwise the redirect would be hidden.
+        cursor = repo_lexical
+        for part in lexical.relative_to(repo_lexical).parts[:-1]:
+            cursor = cursor / part
+            if cursor.is_symlink():
+                raise SystemExit("omniroute_bundle_output_parent_symlink_forbidden")
+
+    resolved = lexical.resolve(strict=False)
     source_resolved = source.resolve()
-    protected = {Path("/").resolve(), ROOT.resolve(), source_resolved}
-    if resolved in protected or ROOT.resolve() in resolved.parents:
+    if resolved in {Path("/").resolve(), ROOT.resolve(), source_resolved}:
         raise SystemExit("omniroute_bundle_output_protected")
+
+    # For the repository-local admitted destination, resolution must still land
+    # on that exact path after the parent-symlink check above.
+    if lexical == admitted_lexical and resolved != admitted_lexical.resolve(strict=False):
+        raise SystemExit("omniroute_bundle_output_parent_symlink_forbidden")
+
     if resolved in source_resolved.parents or source_resolved in resolved.parents:
         raise SystemExit("omniroute_bundle_output_conflicts_with_source")
     return resolved

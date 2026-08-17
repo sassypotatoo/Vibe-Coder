@@ -122,6 +122,9 @@ def main() -> int:
         "omniroute_android_bundle_symlink_forbidden",
         "omniroute_android_bundle_forbidden_package",
         "omniroute_android_bundle_required_path_missing",
+        "OMNIROUTE_REPO_OUTPUT",
+        "omniroute_bundle_output_protected",
+        "omniroute_bundle_output_parent_symlink_forbidden",
         ".vibecoder-omniroute-bundle.json",
         "tree_sha256",
         "feature_degradations",
@@ -175,6 +178,14 @@ def main() -> int:
         "vibecoder-part34-omniroute-build.log",
     ):
         require(live_logging_regression, token, "OmniRoute live-build logging regression")
+
+    output_policy = read("scripts/test_part34_3_bundle_output_policy.py")
+    for token in (
+        "Part 34.3 bundle-output policy regression PASSED",
+        "omnirouteBundle",
+        "omniroute_bundle_output_protected",
+    ):
+        require(output_policy, token, "OmniRoute bundle-output policy regression")
 
     regression = read("scripts/test_part34_3_bundle_tools.py")
     for token in (
