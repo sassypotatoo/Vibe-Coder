@@ -154,6 +154,7 @@ jobs:
         run: |
           python3 scripts/validate_part34_3.py
           python3 scripts/test_part34_3_bundle_tools.py
+          python3 scripts/test_part34_3_live_build_logging.py
           python3 scripts/test_part34_3_asset_tools.py
           python3 scripts/test_part34_3_service_tools.py
           python3 scripts/validate_part34_4.py
@@ -333,6 +334,7 @@ jobs:
           python3 scripts/validate_checkpoint.py
           python3 scripts/validate_part34_3.py
           python3 scripts/test_part34_3_bundle_tools.py
+          python3 scripts/test_part34_3_live_build_logging.py
           python3 scripts/test_part34_3_asset_tools.py
           python3 scripts/test_part34_3_service_tools.py
           python3 scripts/validate_part34_10.py
@@ -348,6 +350,17 @@ jobs:
           export VIBECODER_ANDROID_API="29"
           bash scripts/part34_alpha_build_and_verify.sh "${RUNNER_TEMP}/OmniRoute-release-v3.8.50.zip"
 
+      - name: Upload Alpha build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part34-alpha-failure-diagnostics
+          path: |
+            android/app/build/outputs/vibecoder-part34-omniroute-build.log
+            android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload full Alpha APK + package evidence
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -357,6 +370,7 @@ jobs:
             android/app/build/outputs/vibecoder-part34-alpha-build-evidence.json
             android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
+            android/app/build/outputs/vibecoder-part34-omniroute-build.log
             android/app/build/outputs/vibecoder-part34-omniroute-asset-staging.json
           if-no-files-found: error
           retention-days: 7

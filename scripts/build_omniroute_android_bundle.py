@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,14 +20,68 @@ VERIFY = ROOT / "scripts" / "verify_omniroute_android_bundle.py"
 
 
 def run(cmd, *, cwd=None, env=None, log=None):
+    command = [str(part) for part in cmd]
+    display = "$ " + " ".join(command)
+    started = time.monotonic()
+
     if log:
-        with log.open("a", encoding="utf-8") as f:
-            f.write("$ " + " ".join(map(str, cmd)) + "\n")
-            result = subprocess.run(cmd, cwd=cwd, env=env, stdout=f, stderr=subprocess.STDOUT)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        print(f"[omniroute-build] START {display}", flush=True)
+        with log.open("a", encoding="utf-8", buffering=1) as f:
+            f.write(display + "\n")
+            process = subprocess.Popen(
+                command,
+                cwd=cwd,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+            )
+            if process.stdout is None:
+                process.kill()
+                raise RuntimeError(f"command_output_pipe_missing:{command[0]}")
+
+            stop_heartbeat = threading.Event()
+
+            def heartbeat() -> None:
+                while not stop_heartbeat.wait(60):
+                    elapsed = int(time.monotonic() - started)
+                    print(
+                        f"[omniroute-build] still running after {elapsed}s: {display}",
+                        flush=True,
+                    )
+
+            heartbeat_thread = threading.Thread(
+                target=heartbeat,
+                name="omniroute-build-heartbeat",
+                daemon=True,
+            )
+            heartbeat_thread.start()
+            try:
+                for line in process.stdout:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                    f.write(line)
+                returncode = process.wait()
+            finally:
+                stop_heartbeat.set()
+                heartbeat_thread.join(timeout=1)
+            result = subprocess.CompletedProcess(command, returncode)
     else:
-        result = subprocess.run(cmd, cwd=cwd, env=env)
+        result = subprocess.run(command, cwd=cwd, env=env)
+
+    elapsed = time.monotonic() - started
     if result.returncode != 0:
-        raise RuntimeError(f"command_failed:{result.returncode}:{cmd[0]}")
+        print(
+            f"[omniroute-build] FAILED rc={result.returncode} after {elapsed:.1f}s: {display}",
+            flush=True,
+        )
+        raise RuntimeError(f"command_failed:{result.returncode}:{command[0]}")
+    if log:
+        print(f"[omniroute-build] DONE after {elapsed:.1f}s: {display}", flush=True)
 
 
 def version(exe: str, *args: str) -> str:
@@ -95,7 +151,11 @@ def main() -> int:
     work.mkdir(parents=True, exist_ok=True)
     prepared = work / "prepared"
     admission_evidence = work / "source-admission.json"
-    build_log = work / "build.log"
+    build_log = (
+        args.evidence.parent / "vibecoder-part34-omniroute-build.log"
+        if args.evidence
+        else work / "build.log"
+    )
     try:
         run([sys.executable, str(PREP), str(args.reviewed_archive), str(prepared), "--evidence", str(admission_evidence)], log=build_log)
         evidence["source_admitted"] = True
@@ -106,13 +166,16 @@ def main() -> int:
         # Runtime-only flags are also safe during static generation and make optional
         # feature imports fail-open rather than materialising desktop-native state.
         env.update({"VECTOR_STORE_DISABLE_VEC": "true", "OMNIROUTE_MITM_STUB": "1"})
+        print(f"[omniroute-build] persistent log: {build_log}", flush=True)
         if not args.skip_install:
+            print("[omniroute-build] stage=npm-ci", flush=True)
             run([npm_exe, "ci"], cwd=source, env=env, log=build_log)
             evidence["npm_install_completed"] = True
         else:
             if not (source / "node_modules" / "next" / "package.json").is_file():
                 raise SystemExit("omniroute_android_build_skip_install_without_node_modules")
             evidence["npm_install_completed"] = True
+        print("[omniroute-build] stage=backend-build", flush=True)
         run([npm_exe, "run", "build:backend"], cwd=source, env=env, log=build_log)
         evidence["backend_build_completed"] = True
         standalone = source / ".build" / "next" / "standalone"

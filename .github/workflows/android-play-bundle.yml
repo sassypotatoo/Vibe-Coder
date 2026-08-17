@@ -107,6 +107,7 @@ jobs:
           test -n "$NODE" -a -s "$NODE"
           test -n "$NODE_EVIDENCE" -a -s "$NODE_EVIDENCE"
           python3 scripts/validate_checkpoint.py
+          python3 scripts/test_part34_3_live_build_logging.py
           python3 scripts/validate_part34_10.py
           python3 scripts/test_part34_10_ui_tools.py
           python3 scripts/test_part34_10_alpha_package_tools.py
@@ -115,6 +116,17 @@ jobs:
           export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
           bash scripts/part34_play_bundle_build_and_verify.sh \
             "${RUNNER_TEMP}/OmniRoute-release-v3.8.50.zip" "$NODE" "$NODE_EVIDENCE"
+
+      - name: Upload Play build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part34-play-failure-diagnostics
+          path: |
+            android/app/build/outputs/vibecoder-part34-omniroute-build.log
+            android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload Play bundle + package evidence
         uses: actions/upload-artifact@v7.0.1
@@ -125,6 +137,7 @@ jobs:
             android/app/build/outputs/vibecoder-part34-play-bundle-evidence.json
             android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
+            android/app/build/outputs/vibecoder-part34-omniroute-build.log
             android/app/build/outputs/vibecoder-part34-omniroute-asset-staging.json
           if-no-files-found: error
           retention-days: 14

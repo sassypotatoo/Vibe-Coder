@@ -145,6 +145,14 @@ def main() -> int:
     ):
         require(root_regression, token, "OmniRoute source-root regression")
 
+    live_logging_regression = read("scripts/test_part34_3_live_build_logging.py")
+    for token in (
+        "Part 34.3 live build logging regression PASSED",
+        "still running after",
+        "vibecoder-part34-omniroute-build.log",
+    ):
+        require(live_logging_regression, token, "OmniRoute live-build logging regression")
+
     regression = read("scripts/test_part34_3_bundle_tools.py")
     for token in (
         "Part 34.3 bundle-tool regression PASSED",
@@ -167,6 +175,9 @@ def main() -> int:
         "resolve_prepared_source",
         "omniroute_source_admission_root_invalid",
         "omniroute_source_admission_root_missing",
+        "[omniroute-build] START",
+        "still running after",
+        "vibecoder-part34-omniroute-build.log",
     ):
         require(builder, token, "OmniRoute Android bundle builder")
 

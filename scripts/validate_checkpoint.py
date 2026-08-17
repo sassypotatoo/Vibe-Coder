@@ -6422,6 +6422,14 @@ def check_part34_3_omniroute_source_admission() -> None:
             "omniroute_android_build_node_version_mismatch",
             "build:backend",
             "android_bundle_verified",
+            "[omniroute-build] START",
+            "still running after",
+            "vibecoder-part34-omniroute-build.log",
+        ),
+        "scripts/test_part34_3_live_build_logging.py": (
+            "Part 34.3 live build logging regression PASSED",
+            "child-stdout",
+            "child-stderr",
         ),
         "scripts/test_part34_3_bundle_tools.py": (
             "Part 34.3 bundle-tool regression PASSED",
