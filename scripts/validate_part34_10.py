@@ -577,6 +577,7 @@ feature_manifest=(ROOT/'android/node_runtime/src/main/AndroidManifest.xml').read
 delivery_manager=(ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java').read_text()
 base_gradle=(ROOT/'android/app/build.gradle.kts').read_text()
 settings_gradle=(ROOT/'android/settings.gradle.kts').read_text()
+gradle_properties=(ROOT/'android/gradle.properties').read_text()
 if '<dist:on-demand />' not in feature_manifest or 'dist:fusing dist:include="false"' not in feature_manifest:
     raise SystemExit('Part 34.10.15 node feature delivery manifest missing')
 for token in ('SplitInstallManagerFactory.create', '.addModule(MODULE_NAME)', 'bytesDownloaded()', 'totalBytesToDownload()', 'cancelInstall'):
@@ -584,4 +585,7 @@ for token in ('SplitInstallManagerFactory.create', '.addModule(MODULE_NAME)', 'b
 need(base_gradle, 'dynamicFeatures += setOf(":node_runtime")', 'base dynamic feature registration')
 need(base_gradle, 'com.google.android.play:feature-delivery:2.1.0', 'Play Feature Delivery dependency')
 need(settings_gradle, 'include(":node_runtime")', 'node runtime feature module inclusion')
+need(gradle_properties, 'android.useAndroidX=true', 'AndroidX enablement required by Play Feature Delivery transitive dependencies')
+if 'android.useAndroidX=false' in gradle_properties:
+    raise SystemExit('Part 34.10.15 AndroidX explicitly disabled despite Play Feature Delivery dependency')
 print('Part 34.10.15 Node on-demand delivery validation PASSED')
