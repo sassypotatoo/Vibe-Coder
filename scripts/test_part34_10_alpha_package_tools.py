@@ -1,56 +1,19 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib, json, subprocess, sys, tempfile, zipfile
+import hashlib, json, re, subprocess, sys, tempfile, zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 WRITER=ROOT/'scripts/write_alpha_build_evidence.py'
 APP_GRADLE=ROOT/'android/app/build.gradle.kts'
-AAPT_HIDDEN_SAFE_PATTERN='!.svn:!.git:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~'
+AAPT_TRANSPARENT_PATTERN='__vibecoder_aapt_ignore_none__'
 
-# AAPT defaults include `.*`, which drops the signed OmniRoute manifest and hidden Next
-# runtime directories from generated assets. The app must override only that broad rule.
 gradle_text=APP_GRADLE.read_text(encoding='utf-8')
-if 'androidResources.ignoreAssetsPattern =' not in gradle_text or f'"{AAPT_HIDDEN_SAFE_PATTERN}"' not in gradle_text:
-    raise SystemExit('alpha_aapt_hidden_omniroute_asset_policy_missing')
-if '!.scc:.*:' in gradle_text or ':.*:' in gradle_text:
-    raise SystemExit('alpha_aapt_hidden_omniroute_asset_policy_regressed')
-
-# Mirror AAPT's documented simplified ignore matcher for the names that matter here. `!` only
-# silences the ignore warning; it does not negate the match.
-def aapt_name_ignored(name: str, is_dir: bool, pattern: str) -> bool:
-    lower=name.lower()
-    for raw in pattern.split(':'):
-        token=raw
-        if not token:
-            continue
-        if token.startswith('!'):
-            token=token[1:]
-        if token.startswith('<dir>'):
-            if not is_dir:
-                continue
-            token=token[5:]
-        elif token.startswith('<file>'):
-            if is_dir:
-                continue
-            token=token[6:]
-        token=token.lower()
-        if token.startswith('*') and len(token)>1:
-            match=lower.endswith(token[1:])
-        elif token.endswith('*') and len(token)>1:
-            match=lower.startswith(token[:-1])
-        else:
-            match=lower==token
-        if match:
-            return True
-    return name in ('.','..')
-
-AAPT_DEFAULT='!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~'
-assert aapt_name_ignored('.vibecoder-omniroute-bundle.json', False, AAPT_DEFAULT)
-assert aapt_name_ignored('.next', True, AAPT_DEFAULT)
-assert not aapt_name_ignored('.vibecoder-omniroute-bundle.json', False, AAPT_HIDDEN_SAFE_PATTERN)
-assert not aapt_name_ignored('.next', True, AAPT_HIDDEN_SAFE_PATTERN)
-assert aapt_name_ignored('.git', True, AAPT_HIDDEN_SAFE_PATTERN)
-assert aapt_name_ignored('scratch~', False, AAPT_HIDDEN_SAFE_PATTERN)
+assignments=re.findall(r'androidResources\.ignoreAssetsPattern\s*=\s*"([^"]*)"',gradle_text)
+if assignments != [AAPT_TRANSPARENT_PATTERN]:
+    raise SystemExit(f'alpha_aapt_transparent_omniroute_asset_policy_missing:{assignments}')
+alpha_lane=(ROOT/'scripts/part34_alpha_build_and_verify.sh').read_text(encoding='utf-8')
+if 'run_stage omniroute-aapt-policy 60 python3 "$ROOT/scripts/verify_omniroute_aapt_asset_policy.py"' not in alpha_lane:
+    raise SystemExit('alpha_aapt_pre_gradle_transparency_gate_missing')
 
 def sha(data: bytes) -> str: return hashlib.sha256(data).hexdigest()
 def run(args): return subprocess.run(args,cwd=ROOT,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)

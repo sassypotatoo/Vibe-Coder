@@ -114,6 +114,7 @@ jobs:
           python3 scripts/validate_part34_10.py
           python3 scripts/test_part34_10_ui_tools.py
           python3 scripts/test_part34_10_alpha_package_tools.py
+          python3 scripts/test_part34_10_aapt_asset_policy.py
           python3 scripts/test_part34_10_compile_repairs.py
           bash scripts/part34_10_strict_java_compile.sh
           export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"

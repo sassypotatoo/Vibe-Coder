@@ -73,7 +73,17 @@ with zipfile.ZipFile(apk) as z:
 if seen == 0:
     raise SystemExit('omniroute_apk_asset_missing')
 PY
-  python3 "$ROOT/scripts/verify_omniroute_android_bundle.py" "$OMNI_TMP" >/dev/null || fail "omniroute_apk_asset_bundle_verification_failed"
+  ASSET_DIFF="$ROOT/android/app/build/outputs/vibecoder-part34-apk-asset-diff.json"
+  rm -f "$ASSET_DIFF"
+  set +e
+  OMNI_VERIFY_OUTPUT="$(python3 "$ROOT/scripts/verify_omniroute_android_bundle.py" "$OMNI_TMP" --write-mismatch-report "$ASSET_DIFF" 2>&1)"
+  OMNI_VERIFY_RC=$?
+  set -e
+  if [[ "$OMNI_VERIFY_RC" -ne 0 ]]; then
+    printf '%s\n' "$OMNI_VERIFY_OUTPUT" >&2
+    fail "omniroute_apk_asset_bundle_verification_failed"
+  fi
+  rm -f "$ASSET_DIFF"
 fi
 APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
 printf 'APK verification PASSED\nmode=%s\nsha256=%s\nsigning_certificate_sha256=%s\nfile=%s\n' "$MODE" "$APK_SHA256" "$CERT_SHA256" "$APK"

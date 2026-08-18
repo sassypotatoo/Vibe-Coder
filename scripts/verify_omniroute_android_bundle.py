@@ -74,6 +74,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("bundle_root", type=Path)
     ap.add_argument("--write-verification-stamp", type=Path)
+    ap.add_argument("--write-mismatch-report", type=Path)
     args = ap.parse_args()
     root = args.bundle_root.resolve()
     if not root.is_dir() or root.is_symlink():
@@ -118,7 +119,54 @@ def main() -> int:
             raise SystemExit(f"omniroute_android_bundle_host_native_binary_forbidden:{rel}")
         actual.append({"path": rel, "size": path.stat().st_size, "sha256": sha(path)})
     expected = manifest.get("files")
+    if not isinstance(expected, list):
+        raise SystemExit("omniroute_android_bundle_manifest_files_invalid")
     if actual != expected:
+        expected_by_path = {item.get("path"): item for item in expected if isinstance(item, dict) and isinstance(item.get("path"), str)}
+        actual_by_path = {item["path"]: item for item in actual}
+        missing = sorted(set(expected_by_path) - set(actual_by_path))
+        unexpected = sorted(set(actual_by_path) - set(expected_by_path))
+        changed = []
+        for rel in sorted(set(expected_by_path) & set(actual_by_path)):
+            before = expected_by_path[rel]
+            after = actual_by_path[rel]
+            if before.get("size") != after.get("size") or before.get("sha256") != after.get("sha256"):
+                changed.append({"path": rel, "expected": before, "actual": after})
+        report = {
+            "schema": 1,
+            "error": "omniroute_android_bundle_file_manifest_mismatch",
+            "expected_file_count": len(expected),
+            "actual_file_count": len(actual),
+            "missing_count": len(missing),
+            "unexpected_count": len(unexpected),
+            "changed_count": len(changed),
+            "order_only_mismatch": not missing and not unexpected and not changed,
+            "missing_first_100": missing[:100],
+            "unexpected_first_100": unexpected[:100],
+            "changed_first_50": changed[:50],
+        }
+        if args.write_mismatch_report is not None:
+            report_path = args.write_mismatch_report.expanduser().resolve(strict=False)
+            if report_path == root or root in report_path.parents:
+                raise SystemExit("omniroute_android_mismatch_report_inside_bundle_forbidden")
+            if report_path.exists() and report_path.is_symlink():
+                raise SystemExit("omniroute_android_mismatch_report_symlink_forbidden")
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_report = report_path.with_name(report_path.name + ".tmp")
+            temp_report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            os.replace(temp_report, report_path)
+        print(
+            "omniroute_android_bundle_manifest_diff:"
+            f"expected={len(expected)}:actual={len(actual)}:"
+            f"missing={len(missing)}:unexpected={len(unexpected)}:changed={len(changed)}",
+            file=sys.stderr,
+        )
+        for rel in missing[:20]:
+            print(f"omniroute_android_bundle_missing_from_packaged_tree:{rel}", file=sys.stderr)
+        for rel in unexpected[:20]:
+            print(f"omniroute_android_bundle_unexpected_in_packaged_tree:{rel}", file=sys.stderr)
+        for item in changed[:10]:
+            print(f"omniroute_android_bundle_changed_in_packaged_tree:{item['path']}", file=sys.stderr)
         raise SystemExit("omniroute_android_bundle_file_manifest_mismatch")
     if tree_digest(actual) != manifest.get("tree_sha256"):
         raise SystemExit("omniroute_android_bundle_tree_hash_mismatch")

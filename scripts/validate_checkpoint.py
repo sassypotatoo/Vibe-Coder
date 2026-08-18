@@ -6358,10 +6358,10 @@ def check_part34_3_omniroute_source_admission() -> None:
     app_gradle = read("android/app/build.gradle.kts")
     if 'assets.srcDir("build/generated/omnirouteAssets")' not in app_gradle:
         fail("Part 34.3.3 generated OmniRoute asset source set missing")
-    if 'androidResources.ignoreAssetsPattern =' not in app_gradle or '!.svn:!.git:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~' not in app_gradle:
-        fail("Part 34.3.3 AAPT hidden OmniRoute asset preservation policy missing")
-    if ':.*:' in app_gradle:
-        fail("Part 34.3.3 AAPT broad hidden-asset ignore would strip OmniRoute manifest/runtime")
+    if 'androidResources.ignoreAssetsPattern = "__vibecoder_aapt_ignore_none__"' not in app_gradle:
+        fail("Part 34.3.3 AAPT transparent OmniRoute asset policy missing")
+    if 'verify_omniroute_aapt_asset_policy.py' not in read("scripts/part34_alpha_build_and_verify.sh"):
+        fail("Part 34.3.3 pre-Gradle AAPT transparency gate missing")
 
     for key in (
         "persistent_service_no_wallclock_timeout_ready",
@@ -6654,6 +6654,26 @@ def check_part34_6_conversation_model_controller() -> None:
             fail(f"Part 34.6 CI coverage missing: {token}")
 
 
+def check_part34_aapt_transparency_repair() -> None:
+    app_gradle = read("android/app/build.gradle.kts")
+    alpha_lane = read("scripts/part34_alpha_build_and_verify.sh")
+    apk_verify = read("scripts/verify_android_diagnostic_apk.sh")
+    bundle_verify = read("scripts/verify_omniroute_android_bundle.py")
+    workflow = read(".github/workflows/android-diagnostic-apk.yml")
+    for token, label in (
+        ("__vibecoder_aapt_ignore_none__", "transparent AAPT sentinel"),
+        ("omniroute-aapt-policy", "pre-Gradle AAPT gate"),
+        ("vibecoder-part34-apk-asset-diff.json", "APK mismatch report"),
+        ("--write-mismatch-report", "bundle mismatch diagnostics"),
+        ("test_part34_10_aapt_asset_policy.py", "AAPT regression in CI"),
+    ):
+        haystack = "\n".join((app_gradle, alpha_lane, apk_verify, bundle_verify, workflow))
+        if token not in haystack:
+            fail(f"Part 34 AAPT transparency repair missing {label}: {token}")
+    if 'androidResources.ignoreAssetsPattern = "__vibecoder_aapt_ignore_none__"' not in app_gradle:
+        fail("Part 34 AAPT asset policy is not the transparent sentinel")
+
+
 def check_checksum_manifest() -> None:
     manifest = require("CHECKSUMS.sha256")
     listed: set[str] = set()
@@ -6732,6 +6752,7 @@ def main() -> int:
     check_part34_6_conversation_model_controller()
     check_part31_review_fixes()
     check_project_state_and_docs()
+    check_part34_aapt_transparency_repair()
     check_checksum_manifest()
 
     if ERRORS:

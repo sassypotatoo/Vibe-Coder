@@ -76,11 +76,17 @@ def main() -> int:
         if manifest["apk_asset_packaged"] or manifest["service_round_trip_proven"]:
             raise AssertionError("synthetic bundle overclaimed runtime proof")
 
-        # Hash tamper must fail.
+        # Hash tamper must fail and produce actionable mismatch diagnostics.
         (out / "server.js").write_text("tampered\n")
-        text = run([sys.executable, str(VERIFY), str(out)], expect=1)
+        mismatch_report = base / "mismatch.json"
+        text = run([sys.executable, str(VERIFY), str(out), "--write-mismatch-report", str(mismatch_report)], expect=1)
         if "omniroute_android_bundle_file_manifest_mismatch" not in text:
             raise AssertionError("tamper did not fail on file manifest mismatch")
+        if "omniroute_android_bundle_changed_in_packaged_tree:server.js" not in text:
+            raise AssertionError("tamper diagnostics did not name changed path")
+        report = json.loads(mismatch_report.read_text())
+        if report.get("changed_count") != 1 or report.get("changed_first_50", [{}])[0].get("path") != "server.js":
+            raise AssertionError(f"mismatch report did not bind changed file: {report}")
 
         # Unknown native addon must fail the sealer.
         bad = base / "bad-native"; shutil.copytree(src, bad, symlinks=True)

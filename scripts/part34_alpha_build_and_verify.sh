@@ -46,6 +46,9 @@ run_stage omniroute-asset-stage 120 python3 "$ROOT/scripts/stage_omniroute_andro
   --verification-stamp "$OMNIROUTE_VERIFY_STAMP" \
   --consume-verified-bundle
 
+run_stage omniroute-aapt-policy 60 python3 "$ROOT/scripts/verify_omniroute_aapt_asset_policy.py" \
+  "$ROOT/android/app/build/generated/omnirouteAssets/omniroute/bundle"
+
 # Reconstruct the fixed diagnostic identity only at build time; no binary keystore is tracked.
 KEYSTORE_DIR="$ROOT/android/signing"
 KEYSTORE_FILE="$KEYSTORE_DIR/vibecoder-diagnostic-debug.jks"
