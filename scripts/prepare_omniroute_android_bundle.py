@@ -111,6 +111,23 @@ def package_relatives(node_modules: Path):
             yield child.name, child
 
 
+def is_forbidden_package_identity(rel: str, exact: set[str], prefixes: tuple[str, ...]) -> bool:
+    if rel in exact or rel.startswith(prefixes):
+        return True
+    # Next.js standalone tracing may co-locate duplicate package roots under a
+    # deterministic content-hash suffix, e.g. better-sqlite3-90e2652d1716b047.
+    # Treat only hexadecimal trace suffixes as aliases of an exact forbidden
+    # package. This avoids broad prefix matching such as better-sqlite3-helper.
+    for package_root in exact:
+        marker = package_root + "-"
+        if not rel.startswith(marker):
+            continue
+        suffix = rel[len(marker):]
+        if 8 <= len(suffix) <= 64 and all(ch in "0123456789abcdef" for ch in suffix):
+            return True
+    return False
+
+
 def prune_packages(root: Path, profile: dict) -> list[str]:
     exact = set(profile["forbidden_package_roots"])
     prefixes = tuple(profile["forbidden_package_prefixes"])
@@ -131,7 +148,7 @@ def prune_packages(root: Path, profile: dict) -> list[str]:
         if not nm.is_dir():
             continue
         for rel, path in list(package_relatives(nm)):
-            if rel in exact or rel.startswith(prefixes):
+            if is_forbidden_package_identity(rel, exact, prefixes):
                 if path.exists() or path.is_symlink():
                     shutil.rmtree(path, ignore_errors=False) if path.is_dir() and not path.is_symlink() else path.unlink()
                     removed.append(path.relative_to(root).as_posix())
@@ -190,7 +207,7 @@ def validate_tree(root: Path, profile: dict) -> tuple[list[dict], int]:
     prefixes = tuple(profile["forbidden_package_prefixes"])
     for nm in iter_node_modules(root):
         for rel, _path in package_relatives(nm):
-            if rel in exact or rel.startswith(prefixes):
+            if is_forbidden_package_identity(rel, exact, prefixes):
                 raise SystemExit(f"omniroute_android_bundle_forbidden_package:{rel}")
 
     forbidden_ext = {x.lower() for x in profile["forbidden_native_extensions"]}

@@ -48,6 +48,19 @@ def package_relatives(node_modules: Path):
             yield child.name
 
 
+def is_forbidden_package_identity(rel: str, exact: set[str], prefixes: tuple[str, ...]) -> bool:
+    if rel in exact or rel.startswith(prefixes):
+        return True
+    for package_root in exact:
+        marker = package_root + "-"
+        if not rel.startswith(marker):
+            continue
+        suffix = rel[len(marker):]
+        if 8 <= len(suffix) <= 64 and all(ch in "0123456789abcdef" for ch in suffix):
+            return True
+    return False
+
+
 def tree_digest(files: list[dict]) -> str:
     h = hashlib.sha256()
     for item in files:
@@ -88,7 +101,7 @@ def main() -> int:
     prefixes = tuple(PROFILE["forbidden_package_prefixes"])
     for nm in iter_node_modules(root):
         for rel in package_relatives(nm):
-            if rel in exact or rel.startswith(prefixes):
+            if is_forbidden_package_identity(rel, exact, prefixes):
                 raise SystemExit(f"omniroute_android_bundle_forbidden_package:{rel}")
 
     actual: list[dict] = []

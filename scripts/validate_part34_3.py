@@ -121,6 +121,7 @@ def main() -> int:
         "omniroute_android_bundle_host_native_binary_forbidden",
         "omniroute_android_bundle_symlink_forbidden",
         "omniroute_android_bundle_forbidden_package",
+        "is_forbidden_package_identity",
         "omniroute_android_bundle_required_path_missing",
         "OMNIROUTE_REPO_OUTPUT",
         "omniroute_bundle_output_protected",
@@ -138,6 +139,7 @@ def main() -> int:
         "omniroute_android_bundle_file_manifest_mismatch",
         "omniroute_android_bundle_tree_hash_mismatch",
         "omniroute_android_bundle_manifest_overclaims_runtime_proof",
+        "is_forbidden_package_identity",
         "OmniRoute Android runtime bundle verification PASSED",
     ):
         require(verifier, token, "OmniRoute Android bundle verifier")
@@ -192,6 +194,8 @@ def main() -> int:
         "Part 34.3 bundle-tool regression PASSED",
         "omniroute_bundle_external_symlink_forbidden",
         "omniroute_android_bundle_forbidden_package:wreq-js",
+        "better-sqlite3-90e2652d1716b047",
+        "non-hash package suffix was over-pruned",
     ):
         require(regression, token, "OmniRoute Android bundle regression")
 

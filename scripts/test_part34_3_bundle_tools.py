@@ -24,6 +24,8 @@ def fixture(root: Path) -> None:
     for rel in [
         "build", "migrations", "node_modules/sql.js/dist", "node_modules/sharp/build",
         "node_modules/sharp/node_modules/transitive-helper",
+        "node_modules/better-sqlite3-90e2652d1716b047/prebuilds",
+        "node_modules/better-sqlite3-helper",
         "node_modules/sqlite-vec-linux-x64", "node_modules/@img/sharp-linux-x64",
         "src/mitm/tproxy/native/build/Release", "assets",
     ]:
@@ -43,6 +45,12 @@ def fixture(root: Path) -> None:
     (root / "node_modules/sharp/node_modules/transitive-helper/package.json").write_text(
         '{"name":"transitive-helper","version":"1.0.0"}\n'
     )
+    traced = root / "node_modules/better-sqlite3-90e2652d1716b047"
+    (traced / "package.json").write_text('{"name":"better-sqlite3","version":"12.4.1"}\n')
+    (traced / "prebuilds/darwin-arm64.node").write_bytes(b"\xcf\xfa\xed\xfehost-macho")
+    (root / "node_modules/better-sqlite3-helper/package.json").write_text(
+        '{"name":"better-sqlite3-helper","version":"1.0.0"}\n'
+    )
     (root / "node_modules/sqlite-vec-linux-x64/vec0.so").write_bytes(b"\x7fELFjunk")
     (root / "node_modules/@img/sharp-linux-x64/sharp.node").write_bytes(b"\x7fELFjunk")
     (root / "src/mitm/tproxy/native/build/Release/transparent.node").write_bytes(b"\x7fELFjunk")
@@ -58,6 +66,10 @@ def main() -> int:
         run([sys.executable, str(VERIFY), str(out)])
         if (out / "node_modules/sharp").exists() or (out / "node_modules/sqlite-vec-linux-x64").exists():
             raise AssertionError("known forbidden native package survived pruning")
+        if (out / "node_modules/better-sqlite3-90e2652d1716b047").exists():
+            raise AssertionError("Next-traced forbidden package alias survived pruning")
+        if not (out / "node_modules/better-sqlite3-helper/package.json").is_file():
+            raise AssertionError("non-hash package suffix was over-pruned")
         if (out / "assets/inside-link.txt").is_symlink():
             raise AssertionError("internal symlink was not materialized")
         manifest = json.loads((out / ".vibecoder-omniroute-bundle.json").read_text())
@@ -94,6 +106,15 @@ def main() -> int:
         text = run([sys.executable, str(VERIFY), str(sealed)], expect=1)
         if "omniroute_android_bundle_forbidden_package:wreq-js" not in text:
             raise AssertionError("verifier did not independently enforce forbidden packages")
+
+        # Independent verification must also reject Next standalone's hashed
+        # aliases of exact forbidden package roots, even if only JS bytes remain.
+        traced_forbidden = sealed / "node_modules/better-sqlite3-90e2652d1716b047"
+        traced_forbidden.mkdir(parents=True)
+        (traced_forbidden / "index.js").write_text("module.exports = {}\n")
+        text = run([sys.executable, str(VERIFY), str(sealed)], expect=1)
+        if "omniroute_android_bundle_forbidden_package:better-sqlite3-90e2652d1716b047" not in text:
+            raise AssertionError("verifier did not reject traced forbidden package alias")
 
     print("Part 34.3 bundle-tool regression PASSED")
     return 0

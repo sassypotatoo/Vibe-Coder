@@ -6414,12 +6414,14 @@ def check_part34_3_omniroute_source_admission() -> None:
     for path, tokens in {
         "scripts/prepare_omniroute_android_bundle.py": (
             "omniroute_android_bundle_host_native_binary_forbidden",
+            "is_forbidden_package_identity",
             ".vibecoder-omniroute-bundle.json",
             "tree_sha256",
         ),
         "scripts/verify_omniroute_android_bundle.py": (
             "omniroute_android_bundle_file_manifest_mismatch",
             "omniroute_android_bundle_tree_hash_mismatch",
+            "is_forbidden_package_identity",
         ),
         "scripts/build_omniroute_android_bundle.py": (
             "omniroute_android_build_node_version_mismatch",
@@ -6453,6 +6455,8 @@ def check_part34_3_omniroute_source_admission() -> None:
             "Part 34.3 bundle-tool regression PASSED",
             "omniroute_bundle_external_symlink_forbidden",
             "omniroute_android_bundle_forbidden_package:wreq-js",
+            "better-sqlite3-90e2652d1716b047",
+            "non-hash package suffix was over-pruned",
         ),
         "scripts/stage_omniroute_android_asset.py": (
             "omniroute_asset_stage_bundle_verification_failed",
