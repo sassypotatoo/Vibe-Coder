@@ -281,23 +281,33 @@ if re.search(r'libc::renameat2\([\s\S]{0,400}?\n\s*libc::RENAME_EXCHANGE,', chec
 
 workflow=(ROOT/'.github/workflows/android-diagnostic-apk.yml').read_text()
 node_runtime_workflow=(ROOT/'.github/workflows/node-runtime-proof.yml').read_text()
-if 'node-android-proof-build:' in workflow:
-    die('node_android_ci_job_must_be_detached_from_normal_app_ci')
-node_job=re.search(
-    r'(?ms)^  node-android-proof-build:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:\n|\Z)',
-    node_runtime_workflow,
-)
-if not node_job:
-    die('node_android_ci_job_missing')
-node_body=node_job.group('body')
-match=re.search(r'^    timeout-minutes:\s*(\d+)\s*$', node_body, re.M)
-if not match or int(match.group(1)) < 360:
-    die('node_android_ci_timeout_budget_too_small')
-if 'export VIBECODER_BUILD_JOBS="4"' not in node_body:
-    die('node_android_parallelism_contract_changed')
+for source,label in ((node_runtime_workflow,'dedicated'),(workflow,'development')):
+    node_job=re.search(
+        r'(?ms)^  node-android-proof-build:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:\n|\Z)',
+        source,
+    )
+    if not node_job:
+        die('node_android_ci_job_missing:' + label)
+    node_body=node_job.group('body')
+    match=re.search(r'^    timeout-minutes:\s*(\d+)\s*$', node_body, re.M)
+    if not match or int(match.group(1)) < 360:
+        die('node_android_ci_timeout_budget_too_small:' + label)
+    if 'export VIBECODER_BUILD_JOBS="4"' not in node_body:
+        die('node_android_parallelism_contract_changed:' + label)
+for token in (
+    'actions: read',
+    'Reuse latest verified Node artifact when available',
+    'vibecoder-node-24.19.0-android-arm64',
+    'vibecoder-node-24.19.0-android-arm64-development',
+    "if: steps.reuse-node.outputs.reused != 'true'",
+    'needs: [jcode-android-proof-build, node-android-proof-build]',
+    'vibecoder-part34-development-alpha-apk',
+):
+    if token not in workflow:
+        die('development_node_packaging_contract_missing:' + token)
 
 print('Part 34.10.11 Android libc + Node timeout regression PASSED')
 
 print('Part 34.10.13 Node clean-host sanitizer regression PASSED')
 print('Part 34.10.14 Node CI throughput/timeout regression PASSED')
-print('Part 34.10.15 Node on-demand CI isolation regression PASSED')
+print('Part 34.10.17 development packaged-Node CI regression PASSED')

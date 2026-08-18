@@ -23,6 +23,9 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
     static final String NODE_FILE_NAME = "libvibecoder_node_exec.so";
     private static final String NODE_LIBRARY_NAME = "vibecoder_node_exec";
     static final String NODE_VERSION = "24.19.0";
+    // Development phase: the installable Alpha must carry Node in the base APK.
+    // Flip/remove this only when Play delivery is intentionally re-enabled for publishing.
+    static final boolean DEVELOPMENT_PACKAGED_NODE_ONLY = true;
     private static final int CONFIRMATION_REQUEST_CODE = 24019;
 
     interface Listener {
@@ -65,6 +68,9 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
     State currentState() {
         File directory = resolvePackagedNodeDirectory();
         if (directory != null) return new State("ready", 0L, 0L, null, directory);
+        if (DEVELOPMENT_PACKAGED_NODE_ONLY) {
+            return new State("failed", 0L, 0L, "node_runtime_missing_from_development_apk", null);
+        }
         Set<String> modules = splitInstallManager.getInstalledModules();
         if (modules.contains(MODULE_NAME)) {
             return new State("failed", 0L, 0L, "node_split_installed_but_executable_missing", null);
@@ -74,7 +80,7 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
 
     void restoreActiveInstall() {
         State current = currentState();
-        if (current.ready()) {
+        if (current.ready() || DEVELOPMENT_PACKAGED_NODE_ONLY) {
             listener.onNodeRuntimeState(current);
             return;
         }
@@ -101,6 +107,11 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
         State current = currentState();
         if (current.ready()) {
             listener.onNodeRuntimeState(current);
+            return;
+        }
+        if (DEVELOPMENT_PACKAGED_NODE_ONLY) {
+            listener.onNodeRuntimeState(new State(
+                    "failed", 0L, 0L, "node_runtime_missing_from_development_apk", null));
             return;
         }
         register();

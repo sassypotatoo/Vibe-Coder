@@ -95,6 +95,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: android-diagnostic-${{ github.ref }}
@@ -175,6 +176,7 @@ jobs:
           python3 scripts/test_part34_10_ui_tools.py
           python3 scripts/test_part34_10_alpha_package_tools.py
           python3 scripts/test_part34_10_aapt_asset_policy.py
+          python3 scripts/test_part34_10_16_sideload_alpha.py
           python3 scripts/test_part34_10_compile_repairs.py
 
       - name: Strict Java 17 compile gate
@@ -265,9 +267,130 @@ jobs:
             android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_jcode_exec.so
           if-no-files-found: error
           retention-days: 7
+  node-android-proof-build:
+    name: Exact Node 24.19.0 Android cross-compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4.0.1
+        with:
+          cmdline-tools-version: "15859902"
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install pinned Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - name: Validate Node Android build contract
+        shell: bash
+        run: |
+          python3 scripts/validate_checkpoint.py
+          python3 scripts/test_part34_10_compile_repairs.py
+
+      - name: Reuse latest verified Node artifact when available
+        id: reuse-node
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "reused=false" >> "$GITHUB_OUTPUT"
+          ARTIFACT_ID="$(
+            gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false) | select(.name == "vibecoder-node-24.19.0-android-arm64" or .name == "vibecoder-node-24.19.0-android-arm64-development") | .id' \
+              2>/dev/null | head -n1 || true
+          )"
+          if [[ -z "$ARTIFACT_ID" ]]; then
+            echo "No reusable Node artifact found; exact cross-build will run."
+            exit 0
+          fi
+          TMP_NODE="${RUNNER_TEMP}/reused-node"
+          rm -rf "$TMP_NODE"
+          mkdir -p "$TMP_NODE"
+          if ! gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > "$TMP_NODE/node.zip"; then
+            echo "Artifact download failed; exact cross-build will run."
+            exit 0
+          fi
+          if ! unzip -q "$TMP_NODE/node.zip" -d "$TMP_NODE/unpacked"; then
+            echo "Artifact unzip failed; exact cross-build will run."
+            exit 0
+          fi
+          NODE="$(find "$TMP_NODE/unpacked" -type f -name libvibecoder_node_exec.so -print -quit)"
+          NODE_EVIDENCE="$(find "$TMP_NODE/unpacked" -type f -name vibecoder-part34-node-cross-build-evidence.json -print -quit)"
+          if [[ -z "$NODE" || -z "$NODE_EVIDENCE" || ! -s "$NODE" || ! -s "$NODE_EVIDENCE" ]]; then
+            echo "Reusable artifact is incomplete; exact cross-build will run."
+            exit 0
+          fi
+          if ! python3 scripts/verify_android_elf.py "$NODE" >/dev/null; then
+            echo "Reusable Node ELF failed verification; exact cross-build will run."
+            exit 0
+          fi
+          if ! python3 scripts/verify_node_cross_build_evidence.py "$NODE" "$NODE_EVIDENCE" >/dev/null; then
+            echo "Reusable Node evidence failed verification; exact cross-build will run."
+            exit 0
+          fi
+          DEST="android/app/build/generated/jniLibs/arm64-v8a"
+          mkdir -p "$DEST" android/app/build/outputs
+          install -m 0644 "$NODE" "$DEST/libvibecoder_node_exec.so"
+          install -m 0644 "$NODE_EVIDENCE" android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+          echo "reused=true" >> "$GITHUB_OUTPUT"
+          echo "Reused verified Node artifact id=$ARTIFACT_ID"
+
+      - name: Cross-compile exact Node 24.19.0 for Android Bionic
+        if: steps.reuse-node.outputs.reused != 'true'
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          export VIBECODER_ANDROID_API="29"
+          export VIBECODER_BUILD_JOBS="4"
+          bash scripts/part34_node_execute_cross_build.sh
+
+      - name: Verify proven Node candidate
+        shell: bash
+        run: |
+          python3 scripts/verify_android_elf.py android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so >/dev/null
+          python3 scripts/verify_node_cross_build_evidence.py \
+            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so \
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+
+      - name: Upload packaged-development Node proof
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-node-24.19.0-android-arm64-development
+          path: |
+            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+            android/app/build/outputs/vibecoder-part34-node-configure.log
+            android/app/build/outputs/vibecoder-part34-node-make.log
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Node build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-node-development-failure-diagnostics
+          path: android/app/build/outputs/vibecoder-part34-node-*
+          if-no-files-found: warn
+          retention-days: 14
+
   full-alpha-package:
-    name: Base Alpha APK (Jcode + OmniRoute; Node on-demand)
-    needs: [jcode-android-proof-build]
+    name: Development Alpha APK (Jcode + OmniRoute + Node packaged)
+    needs: [jcode-android-proof-build, node-android-proof-build]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -314,6 +437,11 @@ jobs:
           path: ${{ runner.temp }}/jcode-artifact
 
 
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: vibecoder-node-24.19.0-android-arm64-development
+          path: ${{ runner.temp }}/node-artifact
+
       - name: Stage exact proven Jcode payload
         shell: bash
         run: |
@@ -327,6 +455,23 @@ jobs:
           install -m 0644 "$JCODE" "$DEST/libvibecoder_jcode_exec.so"
           install -m 0644 "$JCODE_EVIDENCE" android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
           python3 scripts/verify_android_elf.py "$DEST/libvibecoder_jcode_exec.so" >/dev/null
+
+      - name: Stage exact proven Node payload for development APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST="android/app/build/generated/jniLibs/arm64-v8a"
+          mkdir -p "$DEST" android/app/build/outputs
+          NODE="$(find "${RUNNER_TEMP}/node-artifact" -type f -name libvibecoder_node_exec.so -print -quit)"
+          NODE_EVIDENCE="$(find "${RUNNER_TEMP}/node-artifact" -type f -name vibecoder-part34-node-cross-build-evidence.json -print -quit)"
+          test -n "$NODE" -a -s "$NODE"
+          test -n "$NODE_EVIDENCE" -a -s "$NODE_EVIDENCE"
+          install -m 0644 "$NODE" "$DEST/libvibecoder_node_exec.so"
+          install -m 0644 "$NODE_EVIDENCE" android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+          python3 scripts/verify_android_elf.py "$DEST/libvibecoder_node_exec.so" >/dev/null
+          python3 scripts/verify_node_cross_build_evidence.py \
+            "$DEST/libvibecoder_node_exec.so" \
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
 
       - name: Reproduce exact reviewed OmniRoute archive
         shell: bash
@@ -372,14 +517,15 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload base Alpha APK (Play Node required) + package evidence
+      - name: Upload directly installable Development Alpha APK + package evidence
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: vibecoder-part34-base-alpha-play-node-required
+          name: vibecoder-part34-development-alpha-apk
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/vibecoder-part34-alpha-build-evidence.json
             android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-verification-stamp.json
             android/app/build/outputs/vibecoder-part34-omniroute-asset-staging.json

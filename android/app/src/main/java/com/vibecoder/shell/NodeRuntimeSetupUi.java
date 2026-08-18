@@ -40,7 +40,7 @@ final class NodeRuntimeSetupUi {
         root.addView(intro, matchWrap());
 
         TextView requirements = text(activity,
-                "Required runtime\n✓ Jcode\n✓ OmniRoute\n⬇ Node.js Android Runtime 24.19.0", 16, false);
+                "Required runtime\n✓ Jcode\n✓ OmniRoute\n• Node.js Android Runtime 24.19.0 (packaged)", 16, false);
         root.addView(requirements, matchWrap());
 
         status = text(activity, "Node.js runtime is not installed.", 15, true);
@@ -55,7 +55,7 @@ final class NodeRuntimeSetupUi {
         progressText = text(activity, "0%", 15, true);
         progressText.setPadding(0, 12, 0, 4);
         root.addView(progressText, matchWrap());
-        bytesText = text(activity, "Download size is provided by Google Play when setup starts.", 13, false);
+        bytesText = text(activity, "Development APKs use the packaged Node runtime; Google Play is not required.", 13, false);
         root.addView(bytesText, matchWrap());
 
         primary = new Button(activity);
@@ -92,7 +92,9 @@ final class NodeRuntimeSetupUi {
         cancel.setVisibility(active ? View.VISIBLE : View.GONE);
         int percent = state.totalBytes > 0L ? state.percent : 0;
         progress.setProgress(percent);
-        progressText.setText(state.totalBytes > 0L ? percent + "%" : "Waiting for Google Play…");
+        progressText.setText(state.totalBytes > 0L ? percent + "%"
+                : (NodeRuntimeDeliveryManager.DEVELOPMENT_PACKAGED_NODE_ONLY
+                        ? "Checking packaged runtime…" : "Waiting for Google Play…"));
         if (state.totalBytes > 0L) {
             long remaining = Math.max(0L, state.totalBytes - state.downloadedBytes);
             updateRateSample(state);
@@ -101,7 +103,9 @@ final class NodeRuntimeSetupUi {
                     formatBytes(state.downloadedBytes), formatBytes(state.totalBytes), formatBytes(remaining), rateAndEta));
         } else {
             resetRateSample();
-            bytesText.setText("Download size is provided by Google Play when setup starts.");
+            bytesText.setText(NodeRuntimeDeliveryManager.DEVELOPMENT_PACKAGED_NODE_ONLY
+                    ? "Development APKs use the packaged Node runtime; Google Play is not required."
+                    : "Download size is provided by Google Play when setup starts.");
         }
         switch (state.status) {
             case "pending": status.setText("Preparing Node.js runtime download…"); break;
@@ -110,7 +114,12 @@ final class NodeRuntimeSetupUi {
             case "cancelling": status.setText("Cancelling setup…"); break;
             case "cancelled": status.setText("Node.js runtime setup cancelled."); break;
             case "failed":
-                if ("node_runtime_play_app_not_owned_use_sideload_alpha".equals(state.error)) {
+                if ("node_runtime_missing_from_development_apk".equals(state.error)) {
+                    status.setText("This development APK is missing the packaged Node.js runtime.");
+                    progressText.setText("Install the Development Alpha APK");
+                    bytesText.setText("No Google Play download is used during development.");
+                    primary.setEnabled(false);
+                } else if ("node_runtime_play_app_not_owned_use_sideload_alpha".equals(state.error)) {
                     status.setText("This base APK cannot download Node from Google Play.");
                     progressText.setText("Use the Sideload Alpha APK");
                     bytesText.setText("The sideload build contains the verified Node.js runtime locally and does not require Play ownership.");

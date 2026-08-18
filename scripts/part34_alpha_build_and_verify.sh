@@ -5,6 +5,8 @@ ARCHIVE="${1:-$ROOT/.runtime-cache/OmniRoute-release-v3.8.50.zip}"
 GENERATED_JNI="$ROOT/android/app/build/generated/jniLibs/arm64-v8a"
 JCODE="$GENERATED_JNI/libvibecoder_jcode_exec.so"
 JCODE_EVIDENCE="$ROOT/android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json"
+NODE="$GENERATED_JNI/libvibecoder_node_exec.so"
+NODE_EVIDENCE="$ROOT/android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json"
 BUNDLE="$ROOT/android/app/build/generated/omnirouteBundle"
 OMNIROUTE_VERIFY_STAMP="$ROOT/android/app/build/outputs/vibecoder-part34-omniroute-verification-stamp.json"
 APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
@@ -32,7 +34,11 @@ python3 "$ROOT/scripts/validate_checkpoint.py"
 [[ -f "$ARCHIVE" && -s "$ARCHIVE" ]] || fail "reviewed_omniroute_archive_missing:$ARCHIVE"
 [[ -f "$JCODE" && -s "$JCODE" ]] || fail "jcode_payload_not_staged"
 [[ -f "$JCODE_EVIDENCE" && -s "$JCODE_EVIDENCE" ]] || fail "jcode_build_evidence_missing"
+[[ -f "$NODE" && -s "$NODE" ]] || fail "node_payload_not_staged_for_development_alpha"
+[[ -f "$NODE_EVIDENCE" && -s "$NODE_EVIDENCE" ]] || fail "node_cross_build_evidence_missing_for_development_alpha"
 python3 "$ROOT/scripts/verify_android_elf.py" "$JCODE" >/dev/null || fail "jcode_android_elf_invalid"
+python3 "$ROOT/scripts/verify_android_elf.py" "$NODE" >/dev/null || fail "node_android_elf_invalid"
+python3 "$ROOT/scripts/verify_node_cross_build_evidence.py" "$NODE" "$NODE_EVIDENCE" >/dev/null || fail "node_cross_build_evidence_invalid"
 
 node_version="$(node --version 2>/dev/null || true)"
 [[ "$node_version" == "v24.19.0" ]] || fail "host_node_version_must_be_24_19_0:actual=${node_version:-missing}"
@@ -58,9 +64,11 @@ expected_keystore="8144fe738427be8e69e2a880fcefa170daecbddaad3929f7639d628bb1439
 actual_keystore="$(sha256sum "$KEYSTORE_FILE" | awk '{print $1}')"
 [[ "$actual_keystore" == "$expected_keystore" ]] || fail "reconstructed_keystore_integrity_mismatch"
 
-# Build the base Alpha without Node. Node is delivered later by the Play on-demand node_runtime module.
+# Development phase: package the already-proven Node runtime directly in the base APK.
+# No Google Play ownership, split install, or Play delivery is required for this Alpha lane.
 run_stage android-host-build 600 bash "$ROOT/scripts/build_android_host.sh"
 run_stage android-apk-build 600 bash "$ROOT/scripts/build_android_shell.sh"
-run_stage android-apk-verify 180 bash "$ROOT/scripts/verify_android_diagnostic_apk.sh" "$APK" alpha
-run_stage alpha-evidence 60 python3 "$ROOT/scripts/write_alpha_build_evidence.py" "$APK" "$JCODE_EVIDENCE" "$EVIDENCE"
+run_stage android-apk-verify 240 bash "$ROOT/scripts/verify_android_diagnostic_apk.sh" "$APK" sideload_alpha
+run_stage alpha-evidence 120 python3 "$ROOT/scripts/write_alpha_build_evidence.py" \
+  "$APK" "$JCODE_EVIDENCE" "$NODE" "$NODE_EVIDENCE" "$EVIDENCE"
 printf 'Part 34 full Alpha package evidence: %s\n' "$EVIDENCE"

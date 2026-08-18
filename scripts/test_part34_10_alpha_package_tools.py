@@ -12,8 +12,14 @@ assignments=re.findall(r'androidResources\.ignoreAssetsPattern\s*=\s*"([^"]*)"',
 if assignments != [AAPT_TRANSPARENT_PATTERN]:
     raise SystemExit(f'alpha_aapt_transparent_omniroute_asset_policy_missing:{assignments}')
 alpha_lane=(ROOT/'scripts/part34_alpha_build_and_verify.sh').read_text(encoding='utf-8')
-if 'run_stage omniroute-aapt-policy 60 python3 "$ROOT/scripts/verify_omniroute_aapt_asset_policy.py"' not in alpha_lane:
-    raise SystemExit('alpha_aapt_pre_gradle_transparency_gate_missing')
+for token in (
+    'run_stage omniroute-aapt-policy 60 python3 "$ROOT/scripts/verify_omniroute_aapt_asset_policy.py"',
+    'libvibecoder_node_exec.so',
+    'verify_node_cross_build_evidence.py',
+    'verify_android_diagnostic_apk.sh" "$APK" sideload_alpha',
+):
+    if token not in alpha_lane:
+        raise SystemExit('development_alpha_contract_missing:' + token)
 
 def sha(data: bytes) -> str: return hashlib.sha256(data).hexdigest()
 def run(args): return subprocess.run(args,cwd=ROOT,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
@@ -24,6 +30,7 @@ with tempfile.TemporaryDirectory(prefix='vibecoder-alpha-evidence-test-') as td:
         'lib/arm64-v8a/libvibecoder_shell_jni.so':b'jni-fixture',
         'lib/arm64-v8a/libvibecoder_android_host.so':b'host-fixture',
         'lib/arm64-v8a/libvibecoder_jcode_exec.so':b'jcode-fixture',
+        'lib/arm64-v8a/libvibecoder_node_exec.so':b'node-fixture',
     }
     omni={'component_id':'omniroute','version':'3.8.50','profile_id':'vibecoder-omniroute-android-backend-v1',
           'tree_sha256':'0'*64,'file_count':1,'total_bytes':1}
@@ -37,22 +44,35 @@ with tempfile.TemporaryDirectory(prefix='vibecoder-alpha-evidence-test-') as td:
         'native_entries':[{'entry':'lib/arm64-v8a/libvibecoder_jcode_exec.so','size':len(payloads['lib/arm64-v8a/libvibecoder_jcode_exec.so']),'sha256':sha(payloads['lib/arm64-v8a/libvibecoder_jcode_exec.so'])}],
         'source':{'checksums_sha256':source_sha},
     }
-    jp=tmp/'jcode.json'; out=tmp/'out.json'
-    jp.write_text(json.dumps(jcode))
-    ok=run([sys.executable,str(WRITER),str(apk),str(jp),str(out)])
+    node_binary=tmp/'libvibecoder_node_exec.so'; node_binary.write_bytes(payloads['lib/arm64-v8a/libvibecoder_node_exec.so'])
+    node_evidence={
+        'node':{'version':'24.19.0','output_sha256':sha(node_binary.read_bytes()),'output_size':node_binary.stat().st_size},
+        'target':{'os':'android','abi':'arm64-v8a','libc':'bionic'},
+    }
+    jp=tmp/'jcode.json'; np=tmp/'node.json'; out=tmp/'out.json'
+    jp.write_text(json.dumps(jcode)); np.write_text(json.dumps(node_evidence))
+    ok=run([sys.executable,str(WRITER),str(apk),str(jp),str(node_binary),str(np),str(out)])
     if ok.returncode != 0: raise SystemExit(f'alpha_evidence_success_fixture_failed:{ok.stdout}')
     evidence=json.loads(out.read_text())
     assert evidence['jcode']['payload_bound_to_proof_evidence'] is True
-    assert evidence['node']['delivery'] == 'play_feature_on_demand'
-    assert evidence['node']['bundled_in_base_apk'] is False
+    assert evidence['node']['delivery'] == 'packaged_in_development_base_apk'
+    assert evidence['node']['bundled_in_base_apk'] is True
+    assert evidence['node']['google_play_required_for_development_apk'] is False
+    assert evidence['node']['play_delivery_deferred_until_publishing'] is True
     assert evidence['jcode']['device_execution_proven'] is False
     assert evidence['node']['device_execution_proven'] is False
     assert evidence['omniroute']['device_service_round_trip_proven'] is False
 
     jcode['native_entries'][0]['sha256']='f'*64
     bad=tmp/'jcode-bad.json'; bad.write_text(json.dumps(jcode))
-    rejected=run([sys.executable,str(WRITER),str(apk),str(bad),str(tmp/'bad.json')])
+    rejected=run([sys.executable,str(WRITER),str(apk),str(bad),str(node_binary),str(np),str(tmp/'bad.json')])
     if rejected.returncode == 0 or 'jcode_build_evidence_payload_mismatch' not in rejected.stdout:
         raise SystemExit(f'alpha_evidence_tampered_jcode_not_rejected:{rejected.stdout}')
+
+    node_evidence['node']['output_sha256']='e'*64
+    bad_node=tmp/'node-bad.json'; bad_node.write_text(json.dumps(node_evidence))
+    rejected=run([sys.executable,str(WRITER),str(apk),str(jp),str(node_binary),str(bad_node),str(tmp/'bad-node.json')])
+    if rejected.returncode == 0 or 'node_cross_build_evidence_payload_mismatch' not in rejected.stdout:
+        raise SystemExit(f'alpha_evidence_tampered_node_not_rejected:{rejected.stdout}')
 
 print('Part 34.10.3 Alpha package evidence regression PASSED')

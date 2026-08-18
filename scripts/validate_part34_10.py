@@ -148,26 +148,31 @@ need(read(Path('scripts/omniroute_android_packaging_metadata_policy.py')), '".gi
 need(apk_verify, 'vibecoder-part34-apk-asset-diff.json', 'APK OmniRoute mismatch diagnostics artifact')
 
 for token in (
+    'node-android-proof-build:',
+    'Cross-compile exact Node 24.19.0 for Android Bionic',
+    'vibecoder-node-24.19.0-android-arm64-development',
     'full-alpha-package:',
-    'needs: [jcode-android-proof-build]',
+    'needs: [jcode-android-proof-build, node-android-proof-build]',
+    'Development Alpha APK (Jcode + OmniRoute + Node packaged)',
     'actions/setup-node@v6.4.0',
     'node-version: "24.19.0"',
     'package-manager-cache: false',
     'actions/download-artifact@v8.0.1',
+    'Stage exact proven Node payload for development APK',
     'bash scripts/fetch_omniroute_reviewed_archive.sh',
     'bash scripts/part34_alpha_build_and_verify.sh',
-    'vibecoder-part34-base-alpha-play-node-required',
+    'vibecoder-part34-development-alpha-apk',
     'python3 scripts/test_part34_10_alpha_package_tools.py'):
-    need(workflow, token, 'base Alpha CI lane with Node on-demand')
+    need(workflow, token, 'development Alpha CI lane with packaged Node')
 for token in (
     'libvibecoder_jcode_exec.so',
+    'libvibecoder_node_exec.so',
+    'verify_node_cross_build_evidence.py',
     'build_omniroute_android_bundle.py', 'stage_omniroute_android_asset.py',
     'build_android_host.sh', 'build_android_shell.sh',
-    'verify_android_diagnostic_apk.sh" "$APK" alpha',
+    'verify_android_diagnostic_apk.sh" "$APK" sideload_alpha',
     'write_alpha_build_evidence.py'):
-    need(alpha_build, token, 'base Alpha build script')
-if 'node_payload_not_staged' in alpha_build or 'libvibecoder_node_exec.so' in alpha_build:
-    raise SystemExit('Part 34.10.15 base Alpha must not require bundled Node payload')
+    need(alpha_build, token, 'development Alpha build script')
 for token in (
     'MODE" == "jcode" || "$MODE" == "alpha"',
     'MODE" == "node" || "$MODE" == "omniroute_service"',
@@ -201,10 +206,12 @@ for token in (
     'URL="${REPO}/archive/${REVIEWED_COMMIT}.zip"',
     'comment != commit'):
     need(omni_fetch, token, 'exact reviewed OmniRoute archive fetch')
-for token in ('jcode_build_evidence_payload_mismatch', 'payload_bound_to_proof_evidence',
-              'play_feature_on_demand'):
+for token in ('jcode_build_evidence_payload_mismatch', 'node_cross_build_evidence_payload_mismatch',
+              'packaged_in_development_base_apk'):
     need(alpha_package_regression, token, 'Alpha package evidence regression')
-for token in ('base_alpha_apk_with_play_on_demand_node_not_device_execution',
+for token in ('development_alpha_apk_with_packaged_node_no_play_dependency_not_device_execution',
+              "'google_play_required_for_development_apk': False",
+              "'play_delivery_deferred_until_publishing': True",
               "'device_execution_proven': False",
               "'device_service_round_trip_proven': False"):
     need(alpha_evidence, token, 'non-overclaiming Alpha build evidence')

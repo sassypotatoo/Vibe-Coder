@@ -22,7 +22,13 @@ delivery=(ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliver
 host=(ROOT/'crates/vibecoder-android-host/src/lib.rs').read_text()
 play_script=(ROOT/'scripts/part34_play_bundle_build_and_verify.sh').read_text()
 
-if 'node-android-proof-build:' in workflow: die('normal_ci_rebuilds_node')
+for token in (
+    'node-android-proof-build:',
+    'Cross-compile exact Node 24.19.0 for Android Bionic',
+    'vibecoder-node-24.19.0-android-arm64-development',
+    'vibecoder-part34-development-alpha-apk',
+):
+    if token not in workflow: die('development_packaged_node_workflow_missing:'+token)
 for token in ('workflow_dispatch:', 'node-android-proof-build:', 'timeout-minutes: 360', 'retention-days: 90',
               'Fail-fast source and Node build-contract validation', 'python3 scripts/validate_checkpoint.py',
               'python3 scripts/test_part34_10_compile_repairs.py'):

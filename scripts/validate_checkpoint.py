@@ -3855,7 +3855,7 @@ def check_part30_android_device_proof() -> None:
     build_lane = read("scripts/part31_build_and_verify.sh")
     if 'verify_android_diagnostic_apk.sh" "$APK" "$MODE"' not in build_lane:
         fail("Part 30 APK verifier is no longer enforced by the Part 31 build lane")
-    if 'versionCode = 31' not in app_gradle or 'versionName = "0.31.0"' not in app_gradle:
+    if 'versionCode = 32' not in app_gradle or 'versionName = "0.32.0"' not in app_gradle:
         fail("Part 31 diagnostic shell version was not advanced")
     if 'useLegacyPackaging = true' not in app_gradle:
         fail("Part 30 APK packaging must request extracted JNI libraries")
@@ -3902,8 +3902,8 @@ def check_part31_first_android_apk() -> None:
     security = read("docs/SECURITY_INVARIANTS.md")
 
     # The reviewed command-line-tools identity must be the one CI actually installs.
-    if combined_workflows.count('cmdline-tools-version: "15859902"') != 4:
-        fail("Part 31/34 CI does not pin command-line-tools 15859902 across the three app jobs plus dedicated Node runtime job")
+    if combined_workflows.count('cmdline-tools-version: "15859902"') != 5:
+        fail("Part 31/34 CI does not pin command-line-tools 15859902 across the four app jobs plus dedicated Node runtime workflow")
     for token in (
         'accept-android-sdk-licenses: true',
         'log-accepted-android-sdk-licenses: false',
@@ -3946,7 +3946,7 @@ def check_part31_first_android_apk() -> None:
         if token not in evidence:
             fail(f"Part 31 build evidence contract missing: {token}")
 
-    if 'versionCode = 31' not in app_gradle or 'versionName = "0.31.0"' not in app_gradle:
+    if 'versionCode = 32' not in app_gradle or 'versionName = "0.32.0"' not in app_gradle:
         fail("Part 31 Android diagnostic version identity drifted")
     expected_cert = "9d73bfaeb16e706723bfc417ce43a9ed6b10286835e8a3050a8ddded67506445"
     expected_keystore = "8144fe738427be8e69e2a880fcefa170daecbddaad3929f7639d628bb14395a6"
@@ -4336,8 +4336,9 @@ def check_part34_2_node_staging_lane() -> None:
     if local_attempt.get('execution_log_sha256') != expected_attempt_log_sha:
         fail("Part 34.2.3 preserved local execution log hash mismatch")
 
-    # The expensive Node source build is isolated from normal app CI. It remains manually
-    # reproducible and preserves compiler/configure logs for the reusable runtime artifact.
+    # The dedicated proof workflow remains reproducible for publishing later. During the current
+    # development phase the normal diagnostic workflow also builds Node so its Alpha APK is directly
+    # installable without Google Play ownership or split delivery.
     for token in (
         'ANDROID_NDK_VERSION: "28.2.13676358"',
         'VIBECODER_ANDROID_API: "29"',
@@ -4354,8 +4355,15 @@ def check_part34_2_node_staging_lane() -> None:
     ):
         if token not in node_runtime_workflow:
             fail(f"Part 34.2.3 dedicated Node CI execution contract missing: {token}")
-    if 'node-android-proof-build:' in workflow:
-        fail("Part 34.10.15 normal app CI must not rebuild Node on every commit")
+    for token in (
+        'node-android-proof-build:',
+        'Cross-compile exact Node 24.19.0 for Android Bionic',
+        'vibecoder-node-24.19.0-android-arm64-development',
+        'needs: [jcode-android-proof-build, node-android-proof-build]',
+        'vibecoder-part34-development-alpha-apk',
+    ):
+        if token not in workflow:
+            fail(f"Part 34.10.17 development Node packaging CI contract missing: {token}")
 
     part = state.get('part34_2_node_runtime', {})
     expected = {
@@ -6687,26 +6695,34 @@ def check_part34_aapt_transparency_repair() -> None:
 def check_part34_sideload_alpha_repair() -> None:
     play = read(".github/workflows/android-play-bundle.yml")
     diag = read(".github/workflows/android-diagnostic-apk.yml")
-    sideload = read("scripts/part34_sideload_alpha_from_play_build.sh")
-    evidence = read("scripts/write_sideload_alpha_build_evidence.py")
+    alpha = read("scripts/part34_alpha_build_and_verify.sh")
+    evidence = read("scripts/write_alpha_build_evidence.py")
     apk_verify = read("scripts/verify_android_diagnostic_apk.sh")
     delivery = read("android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java")
     ui = read("android/app/src/main/java/com/vibecoder/shell/NodeRuntimeSetupUi.java")
+    play_script = read("scripts/part34_play_bundle_build_and_verify.sh")
     for token, label, haystack in (
-        ("vibecoder-part34-sideload-alpha-apk", "sideload artifact", play),
-        ("part34_sideload_alpha_from_play_build.sh", "sideload build step", play),
-        ("vibecoder-part34-base-alpha-play-node-required", "unambiguous base artifact", diag),
-        ('verify_android_diagnostic_apk.sh" "$APK" sideload_alpha', "sideload APK verifier", sideload),
-        ("verify_node_feature_bundle.py", "production AAB recheck", sideload),
-        ("'production_play_delivery_remains_on_demand': True", "production delivery evidence", evidence),
-        ("sideload_alpha", "sideload verifier mode", apk_verify),
-        ("node_runtime_play_app_not_owned_use_sideload_alpha", "APP_NOT_OWNED mapping", delivery),
-        ("Use the Sideload Alpha APK", "APP_NOT_OWNED UI", ui),
+        ("node-android-proof-build:", "automatic Node proof job", diag),
+        ("vibecoder-node-24.19.0-android-arm64-development", "automatic Node artifact", diag),
+        ("needs: [jcode-android-proof-build, node-android-proof-build]", "Alpha Node dependency", diag),
+        ("Development Alpha APK (Jcode + OmniRoute + Node packaged)", "development Alpha job", diag),
+        ("Stage exact proven Node payload for development APK", "Node staging", diag),
+        ("vibecoder-part34-development-alpha-apk", "development Alpha artifact", diag),
+        ('verify_android_diagnostic_apk.sh" "$APK" sideload_alpha', "development APK verifier", alpha),
+        ("libvibecoder_node_exec.so", "packaged Node requirement", alpha),
+        ("'packaged_in_development_base_apk'", "development delivery evidence", evidence),
+        ("'google_play_required_for_development_apk': False", "no-Play development evidence", evidence),
+        ("sideload_alpha", "packaged Node verifier mode", apk_verify),
+        ("DEVELOPMENT_PACKAGED_NODE_ONLY = true", "development delivery switch", delivery),
+        ("node_runtime_missing_from_development_apk", "local missing-Node failure", delivery),
+        ("No Google Play download is used during development.", "development UI no-Play message", ui),
+        ('rm -f "$BASE_NODE"', "deferred Play base-node guard", play_script),
+        ("vibecoder-part34-play-aab", "deferred Play workflow", play),
     ):
         if token not in haystack:
-            fail(f"Part 34.10.16 sideload Alpha repair missing {label}: {token}")
-    if "vibecoder-part34-full-alpha-apk" in diag:
-        fail("Part 34.10.16 ambiguous old base Alpha artifact name survived")
+            fail(f"Part 34.10.17 development Alpha repair missing {label}: {token}")
+    if "vibecoder-part34-base-alpha-play-node-required" in diag:
+        fail("Part 34.10.17 obsolete Play-required development artifact survived")
 
 
 def check_checksum_manifest() -> None:
