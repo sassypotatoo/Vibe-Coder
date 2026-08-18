@@ -6355,8 +6355,13 @@ def check_part34_3_omniroute_source_admission() -> None:
     ):
         if omni.get(key) is not True:
             fail(f"Part 34.3.3 source marker missing: {key}")
-    if 'assets.srcDir("build/generated/omnirouteAssets")' not in read("android/app/build.gradle.kts"):
+    app_gradle = read("android/app/build.gradle.kts")
+    if 'assets.srcDir("build/generated/omnirouteAssets")' not in app_gradle:
         fail("Part 34.3.3 generated OmniRoute asset source set missing")
+    if 'androidResources.ignoreAssetsPattern =' not in app_gradle or '!.svn:!.git:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~' not in app_gradle:
+        fail("Part 34.3.3 AAPT hidden OmniRoute asset preservation policy missing")
+    if ':.*:' in app_gradle:
+        fail("Part 34.3.3 AAPT broad hidden-asset ignore would strip OmniRoute manifest/runtime")
 
     for key in (
         "persistent_service_no_wallclock_timeout_ready",

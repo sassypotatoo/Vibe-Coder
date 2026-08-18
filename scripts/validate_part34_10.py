@@ -138,7 +138,12 @@ need(strings, '<string name="app_name">VibeCoder</string>', 'app label')
 need(manifest, 'android:windowSoftInputMode="adjustResize"', 'IME resize boundary')
 need(workflow, 'bash scripts/part34_10_strict_java_compile.sh', 'strict Java CI gate')
 need(strict_java, ':app:compileDebugJavaWithJavac', 'strict Java Gradle compile task')
-need(read(Path('android/app/build.gradle.kts')), 'options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))', 'strict Java warnings-as-errors')
+app_gradle=read(Path('android/app/build.gradle.kts'))
+need(app_gradle, 'options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))', 'strict Java warnings-as-errors')
+need(app_gradle, 'androidResources.ignoreAssetsPattern =', 'AAPT OmniRoute hidden-asset policy')
+need(app_gradle, '!.svn:!.git:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~', 'AAPT OmniRoute hidden-asset allow-through policy')
+if ':.*:' in app_gradle:
+    raise SystemExit('Part 34.10 AAPT broad hidden-asset ignore would strip OmniRoute manifest/.next runtime')
 
 for token in (
     'full-alpha-package:',

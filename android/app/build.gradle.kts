@@ -49,6 +49,14 @@ android {
         }
     }
 
+    // OmniRoute's sealed Next.js runtime intentionally contains hidden assets, including
+    // .vibecoder-omniroute-bundle.json and Next runtime directories such as .next. AAPT's
+    // default ignore-assets pattern contains `.*`, which silently strips every dotfile/dotdir
+    // from the APK. Preserve the normal VCS/editor/temp exclusions but remove only that broad
+    // hidden-asset rule so the independently verified bundle survives packaging byte-for-byte.
+    androidResources.ignoreAssetsPattern =
+        "!.svn:!.git:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
+
     // Part 27 needs child-process native payloads to exist as real package-owned filesystem files.
     // Legacy JNI packaging compresses .so entries in the APK and lets PackageManager extract them.
     packaging {
