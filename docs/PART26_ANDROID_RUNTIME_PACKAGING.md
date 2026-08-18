@@ -58,7 +58,7 @@ Build and Android Build readiness, and `backend_ready()` requires Core + Agent +
 
 ## Why 16 KB is tracked now
 
-Android 15 introduced 16 KB page-size devices, and current Google Play policy requires apps/updates
+Android 15 introduced 16 KB page-size devices, and current Android distribution requirements expect apps/updates
 targeting Android 15/API 35+ to support 16 KB page sizes. Since VibeCoder ships native code, every
 packaged native artifact must carry explicit 16 KB compatibility evidence rather than assuming a
 4 KB-only build is publishable.

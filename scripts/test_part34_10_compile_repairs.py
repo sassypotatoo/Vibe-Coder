@@ -281,33 +281,23 @@ if re.search(r'libc::renameat2\([\s\S]{0,400}?\n\s*libc::RENAME_EXCHANGE,', chec
 
 workflow=(ROOT/'.github/workflows/android-diagnostic-apk.yml').read_text()
 node_runtime_workflow=(ROOT/'.github/workflows/node-runtime-proof.yml').read_text()
-for source,label in ((node_runtime_workflow,'dedicated'),(workflow,'development')):
-    node_job=re.search(
-        r'(?ms)^  node-android-proof-build:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:\n|\Z)',
-        source,
-    )
-    if not node_job:
-        die('node_android_ci_job_missing:' + label)
-    node_body=node_job.group('body')
-    match=re.search(r'^    timeout-minutes:\s*(\d+)\s*$', node_body, re.M)
-    if not match or int(match.group(1)) < 360:
-        die('node_android_ci_timeout_budget_too_small:' + label)
-    if 'export VIBECODER_BUILD_JOBS="4"' not in node_body:
-        die('node_android_parallelism_contract_changed:' + label)
-for token in (
-    'actions: read',
-    'Reuse latest verified Node artifact when available',
-    'vibecoder-node-24.19.0-android-arm64',
-    'vibecoder-node-24.19.0-android-arm64-development',
-    "if: steps.reuse-node.outputs.reused != 'true'",
-    'needs: [jcode-runtime-release, node-android-proof-build]',
-    'vibecoder-part34-development-alpha-apk',
-):
-    if token not in workflow:
-        die('development_node_packaging_contract_missing:' + token)
+if re.search(r'(?m)^\s*(?:bash\s+)?scripts/part34_node_execute_cross_build\.sh(?:\s|$)', workflow):
+    die('node_cross_build_must_not_run_in_normal_app_ci')
+node_job=re.search(
+    r'(?ms)^  node-runtime-release:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:\n|\Z)',
+    node_runtime_workflow,
+)
+if not node_job:
+    die('node_downloadable_runtime_job_missing')
+node_body=node_job.group('body')
+match=re.search(r'^    timeout-minutes:\s*(\d+)\s*$', node_body, re.M)
+if not match or int(match.group(1)) < 360:
+    die('node_downloadable_runtime_timeout_budget_too_small')
+if 'export VIBECODER_BUILD_JOBS="4"' not in node_body:
+    die('node_downloadable_runtime_parallelism_contract_changed')
 
 print('Part 34.10.11 Android libc + Node timeout regression PASSED')
 
 print('Part 34.10.13 Node clean-host sanitizer regression PASSED')
 print('Part 34.10.14 Node CI throughput/timeout regression PASSED')
-print('Part 34.10.18 downloadable-Jcode development CI regression PASSED')
+print('Part 34.10.15 direct Node runtime CI isolation regression PASSED')

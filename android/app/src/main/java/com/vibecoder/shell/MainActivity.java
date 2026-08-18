@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -28,7 +29,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity {
-    private static final String NODE_FILE_NAME = "libvibecoder_node_exec.so";
     private static final String DIAGNOSTIC_INFERENCE_PROMPT =
             "Reply with one short sentence confirming that this VibeCoder model request was received.";
     private final ExecutorService diagnosticsExecutor = Executors.newSingleThreadExecutor();
@@ -46,19 +46,31 @@ public final class MainActivity extends Activity {
     private volatile String activeProjectId;
     private volatile String activeConversationId;
     private AlphaWorkspaceUi alphaWorkspaceUi;
-    private JcodeRuntimeDeliveryManager jcodeRuntimeManager;
-    private JcodeRuntimeSetupUi jcodeRuntimeSetupUi;
-    private volatile File jcodeExecutableDirectory;
+    private NodeRuntimeDeliveryManager nodeRuntimeManager;
+    private NodeRuntimeSetupUi nodeRuntimeSetupUi;
+    private volatile File nodeExecutableDirectory;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(buildUi());
         if (shouldAutoRunDiagnostics()) {
-            if (jcodeRuntimeSetupUi != null) jcodeRuntimeSetupUi.hide();
+            if (nodeRuntimeSetupUi != null) nodeRuntimeSetupUi.hide();
             runDiagnostics();
         } else {
-            initializeJcodeRuntimeDelivery();
+            initializeNodeRuntimeDelivery();
+            if (nodeRuntimeManager != null) {
+                nodeRuntimeManager.handleInstallResultIntent(getIntent());
+            }
+        }
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (nodeRuntimeManager != null) {
+            nodeRuntimeManager.handleInstallResultIntent(intent);
         }
     }
 
@@ -114,46 +126,48 @@ public final class MainActivity extends Activity {
                 stopActiveChatTurn();
             }
         });
-        jcodeRuntimeSetupUi = new JcodeRuntimeSetupUi(this, new JcodeRuntimeSetupUi.Callbacks() {
-            @Override public void onStartSetup() { if (jcodeRuntimeManager != null) jcodeRuntimeManager.startInstall(); }
-            @Override public void onCancelSetup() { if (jcodeRuntimeManager != null) jcodeRuntimeManager.cancelInstall(); }
+        nodeRuntimeSetupUi = new NodeRuntimeSetupUi(this, new NodeRuntimeSetupUi.Callbacks() {
+            @Override public void onStartSetup() { if (nodeRuntimeManager != null) nodeRuntimeManager.startInstall(); }
+            @Override public void onCancelSetup() { if (nodeRuntimeManager != null) nodeRuntimeManager.cancelInstall(); }
         });
         FrameLayout shell = new FrameLayout(this);
         shell.addView(alphaWorkspaceUi.root(), new FrameLayout.LayoutParams(-1, -1));
-        shell.addView(jcodeRuntimeSetupUi.root(), new FrameLayout.LayoutParams(-1, -1));
+        shell.addView(nodeRuntimeSetupUi.root(), new FrameLayout.LayoutParams(-1, -1));
         return shell;
     }
 
-    private void initializeJcodeRuntimeDelivery() {
-        jcodeRuntimeManager = new JcodeRuntimeDeliveryManager(this, state -> runOnUiThread(() -> {
-            if (isDestroyed() || jcodeRuntimeSetupUi == null) return;
-            jcodeRuntimeSetupUi.render(state);
+    private void initializeNodeRuntimeDelivery() {
+        nodeRuntimeManager = new NodeRuntimeDeliveryManager(this, state -> runOnUiThread(() -> {
+            if (isDestroyed() || nodeRuntimeSetupUi == null) return;
+            nodeRuntimeSetupUi.render(state);
             if (state.ready()) {
-                jcodeExecutableDirectory = state.executableDirectory;
-                jcodeRuntimeSetupUi.hide();
+                nodeExecutableDirectory = state.executableDirectory;
+                nodeRuntimeSetupUi.hide();
                 startChatRuntime();
             } else {
-                jcodeExecutableDirectory = null;
-                jcodeRuntimeSetupUi.show();
-                if (alphaWorkspaceUi != null) alphaWorkspaceUi.setBackendState(false, "Jcode runtime setup required");
+                nodeExecutableDirectory = null;
+                nodeRuntimeSetupUi.show();
+                if (alphaWorkspaceUi != null) alphaWorkspaceUi.setBackendState(false, "Node.js runtime setup required");
             }
         }));
-        JcodeRuntimeDeliveryManager.State state = jcodeRuntimeManager.currentState();
-        jcodeRuntimeSetupUi.render(state);
+        NodeRuntimeDeliveryManager.State state = nodeRuntimeManager.currentState();
+        nodeRuntimeSetupUi.render(state);
         if (state.ready()) {
-            jcodeExecutableDirectory = state.executableDirectory;
-            jcodeRuntimeSetupUi.hide();
+            nodeExecutableDirectory = state.executableDirectory;
+            nodeRuntimeSetupUi.hide();
             startChatRuntime();
         } else {
-            jcodeRuntimeSetupUi.show();
-            if (alphaWorkspaceUi != null) alphaWorkspaceUi.setBackendState(false, "Jcode runtime setup required");
+            nodeRuntimeSetupUi.show();
+            if (alphaWorkspaceUi != null) alphaWorkspaceUi.setBackendState(false, "Node.js runtime setup required");
+            nodeRuntimeManager.restoreActiveInstall();
         }
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        if (jcodeRuntimeManager != null) jcodeRuntimeManager.refreshAfterResume();
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (nodeRuntimeManager != null) nodeRuntimeManager.onActivityResult(requestCode);
     }
 
     private void startChatRuntime() {
@@ -181,17 +195,13 @@ public final class MainActivity extends Activity {
                 return RuntimeBootstrapResult.failed("AI runtime unavailable · native library directory missing");
             }
             File nativeRoot = new File(info.nativeLibraryDir).getCanonicalFile();
-            File nodeExecutable = new File(nativeRoot, NODE_FILE_NAME).getCanonicalFile();
-            if (!nodeExecutable.getParentFile().equals(nativeRoot) || !nodeExecutable.isFile() || !nodeExecutable.canExecute()) {
-                return RuntimeBootstrapResult.failed("AI runtime unavailable · packaged Node.js runtime missing");
+            if (nodeExecutableDirectory == null) {
+                return RuntimeBootstrapResult.failed("AI runtime unavailable · Node.js runtime not installed");
             }
-            if (jcodeExecutableDirectory == null) {
-                return RuntimeBootstrapResult.failed("AI runtime unavailable · Jcode runtime not installed");
-            }
-            File jcodeRoot = jcodeExecutableDirectory.getCanonicalFile();
-            File jcodeExecutable = new File(jcodeRoot, JcodeRuntimeDeliveryManager.JCODE_FILE_NAME).getCanonicalFile();
-            if (!jcodeExecutable.getParentFile().equals(jcodeRoot) || !jcodeExecutable.isFile() || !jcodeExecutable.canExecute()) {
-                return RuntimeBootstrapResult.failed("AI runtime unavailable · Jcode runtime not installed");
+            File nodeRoot = nodeExecutableDirectory.getCanonicalFile();
+            File nodeExecutable = new File(nodeRoot, NodeRuntimeDeliveryManager.NODE_FILE_NAME).getCanonicalFile();
+            if (!nodeExecutable.getParentFile().equals(nodeRoot) || !nodeExecutable.isFile() || !nodeExecutable.canExecute()) {
+                return RuntimeBootstrapResult.failed("AI runtime unavailable · Node.js runtime not installed");
             }
             OmniRouteAssetInstaller.Result asset = OmniRouteAssetInstaller.ensureInstalled(
                     getAssets(), getFilesDir());
@@ -205,7 +215,7 @@ public final class MainActivity extends Activity {
             JSONObject service = new JSONObject(NativeBridge.nativeOmniRouteStart(
                     getFilesDir().getCanonicalPath(),
                     nativeRoot.getCanonicalPath(),
-                    jcodeRoot.getCanonicalPath(),
+                    nodeRoot.getCanonicalPath(),
                     inventory,
                     asset.manifestSha256));
             if (!service.optBoolean("active", false)
@@ -222,7 +232,7 @@ public final class MainActivity extends Activity {
                 controller = new JSONObject(NativeBridge.nativeAppControllerInit(
                         getFilesDir().getCanonicalPath(),
                         nativeRoot.getCanonicalPath(),
-                        jcodeRoot.getCanonicalPath(),
+                        nodeRoot.getCanonicalPath(),
                         inventory));
                 if (controller.optBoolean("chat_ready", false)
                         && controller.optBoolean("runtime_profile_verified", false)
@@ -501,10 +511,10 @@ public final class MainActivity extends Activity {
                 throw new IllegalStateException("native_library_dir_missing");
             }
             File nativeRoot = new File(info.nativeLibraryDir).getCanonicalFile();
-            File installedJcodeRoot = resolveInstalledJcodeDirectory();
-            // Jcode is a package-installed development split. Before setup completes, use the base
-            // root only as a fail-closed probe root; never invent a writable executable path.
-            File packagedExecutableRoot = installedJcodeRoot == null ? nativeRoot : installedJcodeRoot;
+            File installedNodeRoot = resolveInstalledNodeDirectory();
+            // Base-only diagnostic APKs intentionally have no Node split. Supplying the base root
+            // keeps the probe fail-closed for Node without inventing a writable fallback path.
+            File packagedExecutableRoot = installedNodeRoot == null ? nativeRoot : installedNodeRoot;
             byte[] assetEvidence = buildApkAssetEvidence(inventory);
             JSONObject omniRouteAssetState = collectOmniRouteAssetState();
             String snapshot = NativeBridge.nativeProbeSnapshot(
@@ -518,7 +528,7 @@ public final class MainActivity extends Activity {
             JSONObject omniRouteServiceState = collectOmniRouteServiceState(
                     inventory,
                     nativeRoot,
-                    installedJcodeRoot,
+                    installedNodeRoot,
                     omniRouteAssetState);
             JSONObject omniRouteGatewayState = omniRouteServiceState == null
                     ? null
@@ -566,8 +576,8 @@ public final class MainActivity extends Activity {
                     "ABIs: " + Arrays.toString(Build.SUPPORTED_ABIS) + "\n" +
                     "filesDir: " + getFilesDir() + "\n" +
                     "nativeLibraryDir: " + nativeRoot + "\n" +
-                    "jcodeExecutableDir: " + (installedJcodeRoot == null ? "not installed" : installedJcodeRoot) + "\n\n" +
-                    expectedPayloads(nativeRoot, installedJcodeRoot) +
+                    "nodeExecutableDir: " + (installedNodeRoot == null ? "not installed" : installedNodeRoot) + "\n\n" +
+                    expectedPayloads(nativeRoot, installedNodeRoot) +
                     "\n\nOmniRoute asset state:\n" + omniRouteAssetState.toString(2) +
                     (omniRouteServiceState == null
                             ? ""
@@ -595,9 +605,9 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (jcodeRuntimeManager != null) {
-            jcodeRuntimeManager.close();
-            jcodeRuntimeManager = null;
+        if (nodeRuntimeManager != null) {
+            nodeRuntimeManager.close();
+            nodeRuntimeManager = null;
         }
         if (alphaWorkspaceUi != null) {
             alphaWorkspaceUi.destroy();
@@ -623,40 +633,42 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private String expectedPayloads(File baseRoot, File jcodeRoot) {
-        String[] baseNames = {
+    private String expectedPayloads(File baseRoot, File nodeRoot) {
+        String[] names = {
                 "libvibecoder_android_host.so",
-                "libvibecoder_node_exec.so",
+                "libvibecoder_jcode_exec.so",
                 "libvibecoder_java_exec.so",
                 "libvibecoder_aapt2_exec.so",
                 "libvibecoder_zipalign_exec.so"
         };
         StringBuilder out = new StringBuilder("Base packaged native payloads:\n");
-        for (String name : baseNames) {
+        for (String name : names) {
             File candidate = new File(baseRoot, name);
             out.append(candidate.isFile() ? "✅ " : "❌ ").append(name).append('\n');
         }
-        File jcode = jcodeRoot == null ? null : new File(jcodeRoot, JcodeRuntimeDeliveryManager.JCODE_FILE_NAME);
-        out.append("Downloaded Jcode package split:\n")
-                .append(jcode != null && jcode.isFile() ? "✅ " : "⬇ ")
-                .append(JcodeRuntimeDeliveryManager.JCODE_FILE_NAME)
-                .append(jcodeRoot == null ? " (not installed)" : "")
+        File node = nodeRoot == null ? null : new File(nodeRoot, NodeRuntimeDeliveryManager.NODE_FILE_NAME);
+        out.append("Downloaded Node runtime:\n")
+                .append(node != null && node.isFile() ? "✅ " : "⬇ ")
+                .append(NodeRuntimeDeliveryManager.NODE_FILE_NAME)
+                .append(nodeRoot == null ? " (setup required)" : "")
                 .append('\n');
         return out.toString();
     }
 
-    private File resolveInstalledJcodeDirectory() {
-        if (jcodeExecutableDirectory != null) return jcodeExecutableDirectory;
-        JcodeRuntimeDeliveryManager manager = jcodeRuntimeManager;
+    private File resolveInstalledNodeDirectory() {
+        if (nodeExecutableDirectory != null) {
+            return nodeExecutableDirectory;
+        }
+        NodeRuntimeDeliveryManager manager = nodeRuntimeManager;
         boolean temporary = false;
         if (manager == null) {
-            manager = new JcodeRuntimeDeliveryManager(this, state -> { });
+            manager = new NodeRuntimeDeliveryManager(this, state -> { });
             temporary = true;
         }
         try {
-            JcodeRuntimeDeliveryManager.State state = manager.currentState();
+            NodeRuntimeDeliveryManager.State state = manager.currentState();
             if (state.ready()) {
-                jcodeExecutableDirectory = state.executableDirectory;
+                nodeExecutableDirectory = state.executableDirectory;
                 return state.executableDirectory;
             }
             return null;
@@ -690,7 +702,7 @@ public final class MainActivity extends Activity {
     private JSONObject collectOmniRouteServiceState(
             byte[] inventory,
             File nativeRoot,
-            File packagedExecutableRoot,
+            File nodeRoot,
             JSONObject assetState) {
         if (!getIntent().getBooleanExtra("vibecoder_omniroute_service_test", false)) {
             return null;
@@ -702,8 +714,8 @@ public final class MainActivity extends Activity {
             failed.put("active", false);
             failed.put("ready", false);
             failed.put("runtime_profile_round_trip_proven", false);
-            if (packagedExecutableRoot == null) {
-                failed.put("error", "jcode_runtime_not_installed");
+            if (nodeRoot == null) {
+                failed.put("error", "node_runtime_not_installed");
                 return failed;
             }
             if (!assetState.optBoolean("verified", false)) {
@@ -718,7 +730,7 @@ public final class MainActivity extends Activity {
             String response = NativeBridge.nativeOmniRouteStart(
                     getFilesDir().getCanonicalPath(),
                     nativeRoot.getCanonicalPath(),
-                    packagedExecutableRoot.getCanonicalPath(),
+                    nodeRoot.getCanonicalPath(),
                     inventory,
                     manifestSha256);
             JSONObject state = new JSONObject(response);

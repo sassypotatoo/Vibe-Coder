@@ -291,7 +291,7 @@ def main() -> int:
     ):
         require(stager, token, "OmniRoute APK asset stager")
 
-    for build_script_name in ("scripts/part34_alpha_build_and_verify.sh", "scripts/part34_play_bundle_build_and_verify.sh"):
+    for build_script_name in ("scripts/part34_alpha_build_and_verify.sh",):
         build_script = read(build_script_name)
         for token in (
             "run_stage()",

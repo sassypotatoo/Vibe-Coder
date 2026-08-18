@@ -148,57 +148,31 @@ need(read(Path('scripts/omniroute_android_packaging_metadata_policy.py')), '".gi
 need(apk_verify, 'vibecoder-part34-apk-asset-diff.json', 'APK OmniRoute mismatch diagnostics artifact')
 
 for token in (
-    'jcode-runtime-release:',
-    'Ensure downloadable Jcode 0.73.0 runtime split',
-    'Reuse fixed signed Jcode runtime release when available',
-    'Build exact Jcode once when runtime release is missing',
-    'gh release upload',
-    'node-android-proof-build:',
-    'Cross-compile exact Node 24.19.0 for Android Bionic',
-    'vibecoder-node-24.19.0-android-arm64-development',
     'full-alpha-package:',
-    'needs: [jcode-runtime-release, node-android-proof-build]',
-    'Development Alpha APK (Jcode downloads in setup; Node packaged)',
+    'needs: [jcode-android-proof-build]',
     'actions/setup-node@v6.4.0',
     'node-version: "24.19.0"',
     'package-manager-cache: false',
-    'Stage exact proven Node payload for development APK',
+    'actions/download-artifact@v8.0.1',
     'bash scripts/fetch_omniroute_reviewed_archive.sh',
     'bash scripts/part34_alpha_build_and_verify.sh',
-    'vibecoder-part34-development-alpha-apk',
+    'vibecoder-part34-full-alpha-apk',
     'python3 scripts/test_part34_10_alpha_package_tools.py'):
-    need(workflow, token, 'development Alpha CI lane with downloadable Jcode')
-if 'Stage exact proven Jcode payload' in workflow:
-    raise SystemExit('Part 34.10 development Alpha must not stage Jcode into the base APK')
+    need(workflow, token, 'base Alpha CI lane with Node setup download')
 for token in (
-    'libvibecoder_node_exec.so',
-    'verify_node_cross_build_evidence.py',
-    'jcode_must_not_be_bundled_in_development_base_apk',
+    'libvibecoder_jcode_exec.so',
     'build_omniroute_android_bundle.py', 'stage_omniroute_android_asset.py',
-    'verify_android_diagnostic_apk.sh" "$APK" development_alpha_download_jcode',
+    'build_android_host.sh', 'build_android_shell.sh',
+    'verify_android_diagnostic_apk.sh" "$APK" alpha',
     'write_alpha_build_evidence.py'):
-    need(alpha_build, token, 'development Alpha build script')
+    need(alpha_build, token, 'base Alpha build script')
+if 'node_payload_not_staged' in alpha_build or 'libvibecoder_node_exec.so' in alpha_build:
+    raise SystemExit('Part 34.10.15 base Alpha must not require bundled Node payload')
 for token in (
-    'development_alpha_download_jcode',
-    'jcode_must_not_be_bundled_in_development_base_apk',
-    'jcode_runtime_download_descriptor_missing'):
-    need(apk_verify, token, 'development Alpha APK payload verifier')
-for path, token in (
-    ('android/app/src/main/java/com/vibecoder/shell/JcodeRuntimeDeliveryManager.java', 'PackageInstaller.SessionParams.MODE_INHERIT_EXISTING'),
-    ('android/app/src/main/java/com/vibecoder/shell/JcodeRuntimeSetupUi.java', 'Downloading Jcode runtime'),
-    ('android/app/src/main/java/com/vibecoder/shell/JcodeRuntimeInstallReceiver.java', 'STATUS_PENDING_USER_ACTION'),
-    ('scripts/build_jcode_runtime_release.sh', 'bundletool-all-1.18.3.jar'),
-    ('scripts/test_part34_10_18_jcode_runtime_download.py', 'downloadable Jcode runtime regression PASSED')):
-    need(read(Path(path)), token, 'downloadable Jcode runtime contract')
-alpha_package_regression=read(Path('scripts/test_part34_10_alpha_package_tools.py'))
-for token in ('jcode_must_not_be_bundled_in_development_base_apk', 'node_cross_build_payload_mismatch'):
-    need(alpha_package_regression, token, 'Alpha package evidence regression')
-for token in ('development_base_apk_with_node_and_downloadable_signed_jcode_split_not_device_execution',
-              "'signed_package_split_download_during_setup'",
-              "'bundled_in_base_apk':False",
-              "'device_execution_proven':False",
-              "'device_service_round_trip_proven':False"):
-    need(alpha_evidence, token, 'non-overclaiming Alpha build evidence')
+    'MODE" == "jcode" || "$MODE" == "alpha"',
+    'MODE" == "node" || "$MODE" == "omniroute_service"',
+    'MODE" == "omniroute_asset" || "$MODE" == "omniroute_service"'):
+    need(apk_verify, token, 'full Alpha APK payload verifier')
 for token in (
     'SOURCE_REF="release/v3.8.50"',
     'REVIEWED_COMMIT="ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f"',
@@ -206,6 +180,13 @@ for token in (
     'URL="${REPO}/archive/${REVIEWED_COMMIT}.zip"',
     'comment != commit'):
     need(omni_fetch, token, 'exact reviewed OmniRoute archive fetch')
+for token in ('jcode_build_evidence_payload_mismatch', 'payload_bound_to_proof_evidence',
+              'github_release_packageinstaller_split'):
+    need(alpha_package_regression, token, 'Alpha package evidence regression')
+for token in ('base_alpha_apk_with_direct_node_setup_download_not_device_execution',
+              "'device_execution_proven': False",
+              "'device_service_round_trip_proven': False"):
+    need(alpha_evidence, token, 'non-overclaiming Alpha build evidence')
 if provenance.get('source_ref') != 'release/v3.8.50':
     raise SystemExit('Part 34.10 OmniRoute provenance source_ref mismatch')
 if provenance.get('reviewed_git_commit') != 'ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f':
@@ -266,10 +247,10 @@ if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'development_alpha_node_packaged_jcode_download_setup_source_ready_device_proof_pending':
-    raise SystemExit('Part 34.10.18 PROJECT_STATE status mismatch')
-if project.get('step') != '34.10.18-downloadable-jcode-runtime-setup':
-    raise SystemExit('Part 34.10.18 PROJECT_STATE step mismatch')
+if project.get('status') != 'node_direct_setup_download_source_ready_device_proof_pending':
+    raise SystemExit('Part 34.10.15 PROJECT_STATE status mismatch')
+if project.get('step') != '34.10.15-node-direct-setup-download':
+    raise SystemExit('Part 34.10.15 PROJECT_STATE step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -307,10 +288,10 @@ if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'development_alpha_node_packaged_jcode_download_setup_source_ready_device_proof_pending':
-    raise SystemExit('Part 34.10.18 PART34_STATE status mismatch')
-if state.get('step') != '34.10.18-downloadable-jcode-runtime-setup':
-    raise SystemExit('Part 34.10.18 PART34_STATE step mismatch')
+if state.get('status') != 'node_direct_setup_download_source_ready_device_proof_pending':
+    raise SystemExit('Part 34.10.15 PART34_STATE status mismatch')
+if state.get('step') != '34.10.15-node-direct-setup-download':
+    raise SystemExit('Part 34.10.15 PART34_STATE step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -427,10 +408,10 @@ for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
         raise SystemExit(f'Part 34.10.14 {label} generated host graph object contract mismatch')
     if record.get('node_ci_timeout_minutes') != 360 or record.get('node_ci_build_jobs') != 4:
         raise SystemExit(f'Part 34.10.14 {label} Node CI throughput/timeout contract mismatch')
-    if record.get('status') != 'development_alpha_node_packaged_jcode_download_setup_source_ready_device_proof_pending':
-        raise SystemExit(f'Part 34.10.18 {label} status mismatch')
-    if record.get('step') != '34.10.18-downloadable-jcode-runtime-setup':
-        raise SystemExit(f'Part 34.10.18 {label} step mismatch')
+    if record.get('status') != 'node_direct_setup_download_source_ready_device_proof_pending':
+        raise SystemExit(f'Part 34.10.15 {label} status mismatch')
+    if record.get('step') != '34.10.15-node-direct-setup-download':
+        raise SystemExit(f'Part 34.10.15 {label} step mismatch')
     if record.get('fresh_android_compile') is not False or record.get('full_alpha_apk_compiled') is not False:
         raise SystemExit(f'Part 34.10.14 {label} overclaims post-repair compile/full Alpha proof')
 
@@ -599,17 +580,24 @@ if latest_ci_throughput_repair.get('post_fix_compile_claim') is not False or lat
     raise SystemExit('Part 34.10.14 evidence overclaims post-fix compiler proof')
 
 
-jcode_feature_manifest=(ROOT/'android/jcode_runtime/src/main/AndroidManifest.xml').read_text()
-jcode_delivery_manager=(ROOT/'android/app/src/main/java/com/vibecoder/shell/JcodeRuntimeDeliveryManager.java').read_text()
+feature_manifest=(ROOT/'android/node_runtime/src/main/AndroidManifest.xml').read_text()
+delivery_manager=(ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java').read_text()
+setup_ui=(ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeSetupUi.java').read_text()
 base_gradle=(ROOT/'android/app/build.gradle.kts').read_text()
+base_manifest=(ROOT/'android/app/src/main/AndroidManifest.xml').read_text()
 settings_gradle=(ROOT/'android/settings.gradle.kts').read_text()
-gradle_properties=(ROOT/'android/gradle.properties').read_text()
-if '<dist:on-demand />' not in jcode_feature_manifest or 'dist:fusing dist:include="false"' not in jcode_feature_manifest:
-    raise SystemExit('Part 34.10.18 Jcode package-split manifest missing')
-for token in ('PackageInstaller.SessionParams.MODE_INHERIT_EXISTING', 'canRequestPackageInstalls()', 'JcodeRuntimeInstallReceiver'):
-    need(jcode_delivery_manager, token, 'Jcode signed package-split delivery manager')
-need(base_gradle, 'dynamicFeatures += setOf(":jcode_runtime")', 'Jcode package split registration')
-need(settings_gradle, 'include(":jcode_runtime")', 'Jcode runtime feature module inclusion')
-need(base_gradle, 'versionCode = 33', 'fixed development split-compatible version code')
-need(gradle_properties, 'android.useAndroidX=true', 'AndroidX enablement')
-print('Part 34.10.18 downloadable Jcode delivery validation PASSED')
+if '<dist:on-demand' in feature_manifest or '<dist:install-time>' not in feature_manifest:
+    raise SystemExit('Part 34.10.15 direct-download runtime split manifest invalid')
+for token in ('PackageInstaller.SessionParams.MODE_INHERIT_EXISTING', 'Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES',
+              'RUNTIME_URL', 'getPackageArchiveInfo', 'PackageInstaller.STATUS_PENDING_USER_ACTION'):
+    need(delivery_manager, token, 'Node direct-download PackageInstaller manager')
+need(setup_ui, 'Download & Set Up Node.js', 'Node direct-download setup UI')
+need(base_gradle, 'dynamicFeatures += setOf(":node_runtime")', 'downloadable node runtime split build registration')
+need(settings_gradle, 'include(":node_runtime")', 'node runtime split module inclusion')
+need(base_manifest, 'android.permission.REQUEST_INSTALL_PACKAGES', 'runtime split installer permission')
+for forbidden in ('com.google.android.play:feature-delivery', 'SplitCompatApplication', 'SplitInstallManager'):
+    if forbidden in base_gradle + base_manifest + delivery_manager:
+        raise SystemExit('Part 34.10.15 Play runtime dependency survived: ' + forbidden)
+if (ROOT/'.github/workflows/android-play-bundle.yml').exists():
+    raise SystemExit('Part 34.10.15 Play bundle workflow must be absent during development')
+print('Part 34.10.15 direct Node setup validation PASSED')

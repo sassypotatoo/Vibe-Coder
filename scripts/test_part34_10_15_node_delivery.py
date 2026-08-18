@@ -1,97 +1,131 @@
 #!/usr/bin/env python3
-"""Regression for the current development Node delivery contract.
-
-Part 34.10.15 originally introduced Play on-demand Node. During pre-Play development the contract is
-intentionally different: Node 24.19.0 is a verified package-owned executable in the base APK so a
-sideloaded Alpha never depends on Google Play. Jcode is the runtime downloaded during setup.
-"""
+import hashlib
 import json
+import subprocess
+import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def die(code: str) -> None:
-    raise SystemExit("test_part34_10_15_node_delivery: " + code)
+def die(code):
+    raise SystemExit('test_part34_10_15_node_delivery: ' + code)
 
-workflow = (ROOT / ".github/workflows/android-diagnostic-apk.yml").read_text()
-node_workflow = (ROOT / ".github/workflows/node-runtime-proof.yml").read_text()
-activity = (ROOT / "android/app/src/main/java/com/vibecoder/shell/MainActivity.java").read_text()
-alpha = (ROOT / "scripts/part34_alpha_build_and_verify.sh").read_text()
-verify_apk = (ROOT / "scripts/verify_android_diagnostic_apk.sh").read_text()
-evidence = (ROOT / "scripts/write_alpha_build_evidence.py").read_text()
-host = (ROOT / "crates/vibecoder-android-host/src/lib.rs").read_text()
-inventory = json.loads((ROOT / "config/android-runtime-inventory.json").read_text())
+def run(*args):
+    return subprocess.run([sys.executable, *map(str, args)], cwd=ROOT, text=True, capture_output=True)
 
-for token in (
-    "node-android-proof-build:",
-    "Exact Node 24.19.0 Android cross-compile",
-    "id: reuse-node",
-    "Cross-compile exact Node 24.19.0 for Android Bionic",
-    "vibecoder-node-24.19.0-android-arm64-development",
-    "needs: [jcode-runtime-release, node-android-proof-build]",
-    "Development Alpha APK (Jcode downloads in setup; Node packaged)",
-    "vibecoder-part34-development-alpha-apk",
+workflow = (ROOT / '.github/workflows/android-diagnostic-apk.yml').read_text()
+node_workflow = (ROOT / '.github/workflows/node-runtime-proof.yml').read_text()
+activity = (ROOT / 'android/app/src/main/java/com/vibecoder/shell/MainActivity.java').read_text()
+delivery = (ROOT / 'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java').read_text()
+setup_ui = (ROOT / 'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeSetupUi.java').read_text()
+base_gradle = (ROOT / 'android/app/build.gradle.kts').read_text()
+base_manifest = (ROOT / 'android/app/src/main/AndroidManifest.xml').read_text()
+feature_manifest = (ROOT / 'android/node_runtime/src/main/AndroidManifest.xml').read_text()
+packager = (ROOT / 'scripts/package_node_runtime_release.sh').read_text()
+stager = (ROOT / 'scripts/stage_node_runtime_split.py').read_text()
+
+if (ROOT / '.github/workflows/android-play-bundle.yml').exists():
+    die('play_bundle_workflow_must_be_removed')
+for path in (
+    'scripts/part34_play_bundle_build_and_verify.sh',
+    'scripts/stage_node_play_feature.py',
+    'scripts/verify_node_feature_bundle.py',
+    'scripts/write_play_bundle_evidence.py',
 ):
-    if token not in workflow:
-        die("development_packaged_node_workflow_missing:" + token)
+    if (ROOT / path).exists():
+        die('play_specific_source_must_be_removed:' + path)
+for token in ('com.google.android.play:feature-delivery', 'SplitCompat', 'SplitInstallManager', 'SplitInstallRequest'):
+    if token in base_gradle + base_manifest + activity + delivery:
+        die('play_runtime_reference_survived:' + token)
 
 for token in (
-    "workflow_dispatch:",
-    "node-android-proof-build:",
-    "timeout-minutes: 360",
-    "retention-days: 90",
-    "Fail-fast source and Node build-contract validation",
-    "python3 scripts/validate_checkpoint.py",
-    "python3 scripts/test_part34_10_compile_repairs.py",
+    'PackageInstaller.SessionParams.MODE_INHERIT_EXISTING',
+    'params.setAppPackageName(activity.getPackageName())',
+    'Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES',
+    'canRequestPackageInstalls()',
+    'RUNTIME_URL',
+    'vibecoder-node-runtime-24.19.0-v31',
+    'vibecoder-node-runtime-arm64-v31.apk',
+    'BaseDexClassLoader',
+    'findLibrary(NODE_LIBRARY_NAME)',
+    'getPackageArchiveInfo',
+    'GET_SIGNING_CERTIFICATES',
+    'PackageInstaller.STATUS_PENDING_USER_ACTION',
+):
+    if token not in delivery:
+        die('direct_download_manager_missing:' + token)
+if 'android.permission.REQUEST_INSTALL_PACKAGES' not in base_manifest:
+    die('request_install_packages_permission_missing')
+if 'Download & Set Up Node.js' not in setup_ui or 'GitHub release' not in setup_ui:
+    die('node_setup_ui_missing')
+if '<dist:on-demand' in feature_manifest:
+    die('play_on_demand_manifest_survived')
+if '<dist:install-time>' not in feature_manifest or '<dist:removable dist:value="true"' not in feature_manifest:
+    die('downloadable_runtime_split_packaging_manifest_missing')
+
+# Normal APK CI remains the previously proven Jcode + OmniRoute base lane. Node compilation is isolated.
+if 'bash scripts/part34_node_execute_cross_build.sh' in workflow:
+    die('normal_app_workflow_rebuilds_node')
+for token in (
+    'Node Android downloadable runtime',
+    'Check fixed downloadable runtime release',
+    "gh release view \"$NODE_RUNTIME_TAG\"",
+    'steps.runtime_release.outputs.exists != \'true\'',
+    'part34_node_execute_cross_build.sh',
+    'package_node_runtime_release.sh',
+    'gh release create',
+    'gh release upload',
 ):
     if token not in node_workflow:
-        die("dedicated_node_workflow_missing:" + token)
-
+        die('downloadable_node_workflow_missing:' + token)
 for token in (
-    "libvibecoder_node_exec.so",
-    "node_cross_build_evidence_missing",
-    "verify_node_cross_build_evidence.py",
-    'verify_android_diagnostic_apk.sh" "$APK" development_alpha_download_jcode',
+    ':node_runtime:assembleDebug',
+    'verify_node_runtime_split_apk.py',
+    'apksigner',
+    'aapt2',
+    "split='node_runtime'|featureSplit='node_runtime'",
 ):
-    if token not in alpha:
-        die("development_alpha_node_guard_missing:" + token)
+    if token not in packager:
+        die('runtime_packager_missing:' + token)
+for token in ('github_release_packageinstaller_split', 'release_tag', 'runtime_apk'):
+    if token not in stager:
+        die('runtime_stager_identity_missing:' + token)
 
-for token in (
-    "File nodeExecutable = new File(nativeRoot, NODE_FILE_NAME).getCanonicalFile();",
-    "packaged Node.js runtime missing",
-    "nativeRoot.getCanonicalPath()",
-):
-    if token not in activity:
-        die("android_base_node_runtime_missing:" + token)
+verify = ROOT / 'scripts/verify_node_runtime_split_apk.py'
+with tempfile.TemporaryDirectory(prefix='vibecoder-node-runtime-split-') as td:
+    d = Path(td)
+    node = d / 'node.so'
+    node.write_bytes(b'node-24.19.0-fixture')
+    node_hash = hashlib.sha256(node.read_bytes()).hexdigest()
+    runtime_manifest = json.dumps({
+        'schema': 1,
+        'component_id': 'node',
+        'version': '24.19.0',
+        'abi': 'arm64-v8a',
+        'libc': 'bionic',
+        'file_name': 'libvibecoder_node_exec.so',
+        'size': node.stat().st_size,
+        'sha256': node_hash,
+        'delivery': 'github_release_packageinstaller_split',
+        'split': 'node_runtime',
+        'release_tag': 'vibecoder-node-runtime-24.19.0-v31',
+        'runtime_apk': 'vibecoder-node-runtime-arm64-v31.apk',
+    }, sort_keys=True, separators=(',', ':')).encode()
+    apk = d / 'runtime.apk'
+    with zipfile.ZipFile(apk, 'w') as z:
+        z.writestr('lib/arm64-v8a/libvibecoder_node_exec.so', node.read_bytes())
+        z.writestr('assets/node-runtime/manifest.json', runtime_manifest)
+    result = run(verify, apk, node)
+    if result.returncode:
+        die('valid_runtime_split_fixture_rejected:' + result.stderr.strip())
+    bad = d / 'bad.apk'
+    with zipfile.ZipFile(bad, 'w') as z:
+        z.writestr('lib/arm64-v8a/libvibecoder_node_exec.so', b'wrong-node')
+        z.writestr('assets/node-runtime/manifest.json', runtime_manifest)
+    result = run(verify, bad, node)
+    if result.returncode == 0 or 'node_payload_hash_mismatch' not in result.stderr:
+        die('corrupt_runtime_split_not_rejected')
 
-for token in (
-    '"development_alpha_download_jcode"',
-    "lib/arm64-v8a/libvibecoder_node_exec.so",
-    "node_native_entry_missing",
-):
-    if token not in verify_apk:
-        die("development_node_apk_verifier_missing:" + token)
-
-for token in (
-    "'delivery':'development_base_apk'",
-    "'bundled_in_base_apk':True",
-    "NODE",
-):
-    if token not in evidence:
-        die("development_node_evidence_missing:" + token)
-
-components = {item.get("component_id"): item for item in inventory.get("components", []) if isinstance(item, dict)}
-node = components.get("node", {})
-if node.get("version_requirement") != "24.19.0":
-    die("node_version_drift")
-if node.get("placement") != "apk_native_executable" or node.get("bundled_in_base") is not True:
-    die("node_development_placement_invalid")
-
-for token in (
-    "RuntimePlacement::ApkNativeExecutable => self.paths.native_library_dir()",
-    "RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable => {",
-):
-    if token not in host:
-        die("execution_root_contract_missing:" + token)
-
-print("Part 34.10.15 Node delivery regression PASSED (development base-packaged Node)")
+print('Part 34.10.15 direct Node setup regression PASSED')

@@ -10,9 +10,6 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.VibeCoderDiagnostic">
-        <receiver
-            android:name=".JcodeRuntimeInstallReceiver"
-            android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

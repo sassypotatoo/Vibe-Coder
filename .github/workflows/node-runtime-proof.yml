@@ -1,13 +1,23 @@
-name: Node Android runtime proof
+name: Node Android downloadable runtime
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "android/node_runtime/**"
+      - "scripts/stage_node_runtime_split.py"
+      - "scripts/verify_node_runtime_split_apk.py"
+      - "scripts/package_node_runtime_release.sh"
+      - "scripts/part34_node_execute_cross_build.sh"
+      - "scripts/verify_node_cross_build_evidence.py"
+      - ".github/workflows/node-runtime-proof.yml"
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 concurrency:
-  group: node-runtime-proof-${{ github.ref }}
+  group: node-runtime-download-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -16,15 +26,70 @@ env:
   ANDROID_NDK_VERSION: "28.2.13676358"
   ANDROID_CMAKE_VERSION: "3.22.1"
   VIBECODER_ANDROID_API: "29"
+  NODE_RUNTIME_TAG: "vibecoder-node-runtime-24.19.0-v31"
+  NODE_RUNTIME_ASSET: "vibecoder-node-runtime-arm64-v31.apk"
 
 jobs:
-  node-android-proof-build:
-    name: Exact Node 24.19.0 Android cross-compile
+  node-runtime-release:
+    name: Ensure downloadable Node 24.19.0 runtime exists
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6.0.2
-      - name: Fail-fast source and Node build-contract validation
+
+      - name: Check fixed downloadable runtime release
+        id: runtime_release
+        shell: bash
+        run: |
+          set -euo pipefail
+          exists=false
+          if gh release view "$NODE_RUNTIME_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' 2>/dev/null \
+              | grep -Fxq "$NODE_RUNTIME_ASSET"; then
+            exists=true
+          fi
+          echo "exists=$exists" >> "$GITHUB_OUTPUT"
+          echo "Node runtime release already exists: $exists"
+
+      - uses: actions/setup-java@v5.6.0
+        if: steps.runtime_release.outputs.exists != 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v4.0.1
+        if: steps.runtime_release.outputs.exists != 'true'
+        with:
+          cmdline-tools-version: "15859902"
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install pinned Android packages
+        if: steps.runtime_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - uses: dtolnay/rust-toolchain@1.88.0
+        if: steps.runtime_release.outputs.exists != 'true'
+        with:
+          targets: aarch64-linux-android
+
+      - uses: gradle/actions/setup-gradle@v6.2.0
+        if: steps.runtime_release.outputs.exists != 'true'
+        with:
+          gradle-version: "9.5.0"
+          cache-provider: basic
+
+      - name: Fail-fast source and direct-download contract validation
+        if: steps.runtime_release.outputs.exists != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -32,50 +97,70 @@ jobs:
           python3 scripts/validate_part34_10.py
           python3 scripts/test_part34_10_compile_repairs.py
           python3 scripts/test_part34_10_15_node_delivery.py
-      - uses: actions/setup-java@v5.6.0
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: android-actions/setup-android@v4.0.1
-        with:
-          cmdline-tools-version: "15859902"
-          accept-android-sdk-licenses: true
-          log-accepted-android-sdk-licenses: false
-      - name: Install pinned Android packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          sdkmanager "platforms;android-${ANDROID_PLATFORM}" "build-tools;${ANDROID_BUILD_TOOLS}" "ndk;${ANDROID_NDK_VERSION}" "cmake;${ANDROID_CMAKE_VERSION}"
-      - uses: dtolnay/rust-toolchain@1.88.0
-        with:
-          targets: aarch64-linux-android
-      - name: Cross-compile exact Node source for Android Bionic
+
+      - name: Cross-compile exact Node source for Android Bionic once
+        if: steps.runtime_release.outputs.exists != 'true'
         shell: bash
         run: |
           export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
           export VIBECODER_BUILD_JOBS="4"
           bash scripts/part34_node_execute_cross_build.sh
+
       - name: Verify proven Node candidate
+        if: steps.runtime_release.outputs.exists != 'true'
         shell: bash
         run: |
-          python3 scripts/verify_android_elf.py android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so >/dev/null
-          python3 scripts/verify_node_cross_build_evidence.py android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
-      - name: Upload reusable Node runtime artifact
+          python3 scripts/verify_android_elf.py \
+            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so >/dev/null
+          python3 scripts/verify_node_cross_build_evidence.py \
+            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so \
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+
+      - name: Package signed downloadable Node runtime split
+        if: steps.runtime_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          bash scripts/package_node_runtime_release.sh \
+            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so \
+            android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
+
+      - name: Publish fixed Node runtime release
+        if: steps.runtime_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/node_runtime/build/outputs/runtime-package/$NODE_RUNTIME_ASSET"
+          HASH="$APK.sha256"
+          test -s "$APK"
+          test -s "$HASH"
+          if gh release view "$NODE_RUNTIME_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$NODE_RUNTIME_TAG" "$APK" "$HASH" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$NODE_RUNTIME_TAG" "$APK" "$HASH" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "VibeCoder Node.js Android Runtime 24.19.0" \
+              --notes "Development runtime downloaded by VibeCoder first-run setup."
+          fi
+
+      - name: Upload reusable runtime package artifact
+        if: steps.runtime_release.outputs.exists != 'true'
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: vibecoder-node-24.19.0-android-arm64
+          name: vibecoder-node-runtime-download-package
           path: |
-            android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so
+            android/node_runtime/build/outputs/runtime-package/vibecoder-node-runtime-arm64-v31.apk
+            android/node_runtime/build/outputs/runtime-package/vibecoder-node-runtime-arm64-v31.apk.sha256
             android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
-            android/app/build/outputs/vibecoder-part34-node-configure.log
-            android/app/build/outputs/vibecoder-part34-node-make.log
           if-no-files-found: error
           retention-days: 90
-      - name: Upload failure logs
-        if: failure()
+
+      - name: Upload Node build failure logs
+        if: failure() && steps.runtime_release.outputs.exists != 'true'
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: vibecoder-node-24.19.0-failure-logs
+          name: vibecoder-node-runtime-download-failure
           path: android/app/build/outputs/vibecoder-part34-node-*.log
           if-no-files-found: warn
-          retention-days: 90
+          retention-days: 30

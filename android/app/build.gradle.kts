@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.vibecoder.shell"
-    dynamicFeatures += setOf(":jcode_runtime")
+    dynamicFeatures += setOf(":node_runtime")
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -24,8 +24,8 @@ android {
         applicationId = "com.vibecoder.shell"
         minSdk = 29
         targetSdk = 36
-        versionCode = 33
-        versionName = "0.33.0-dev"
+        versionCode = 31
+        versionName = "0.31.0"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -35,20 +35,6 @@ android {
             cmake {
                 arguments += listOf("-DANDROID_STL=none")
             }
-        }
-    }
-
-    // Development runtime split is downloaded by VibeCoder itself. Keeping ABI resources in the
-    // feature master APK gives setup exactly one signed split file to download/install.
-    bundle {
-        abi {
-            enableSplit = false
-        }
-        density {
-            enableSplit = false
-        }
-        language {
-            enableSplit = false
         }
     }
 
@@ -103,8 +89,7 @@ android {
     }
 }
 
-
-// Keep Java warnings fatal so the development runtime path remains a real compile contract.
+// Keep warnings fatal so the standalone Java gate remains a real compile contract.
 tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))
 }

@@ -15,6 +15,6 @@ fi
 INFO="$("${EXEC[@]}" --version)"
 printf '%s\n' "$INFO" | grep -Eq '^Gradle 9\.5\.0$' || { echo "part34_10_strict_java_compile: gradle_version_must_be_9_5_0" >&2; exit 1; }
 # JavaCompile is configured with -Xlint:all -Werror in app/build.gradle.kts. This compiles against
-# the actual feature-delivery dependency instead of pretending third-party classes are android.jar.
+# the actual Android application source and SDK instead of relying on source-only inspection.
 "${EXEC[@]}" --no-daemon --stacktrace :app:compileDebugJavaWithJavac
 echo "Part 34.10 strict Java compile PASSED"

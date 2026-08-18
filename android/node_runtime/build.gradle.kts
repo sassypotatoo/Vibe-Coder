@@ -20,7 +20,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            // A pinned, independently built Node artifact is staged here only for Play bundle builds.
+            // A pinned, independently built Node artifact is staged here only when producing the downloadable runtime split.
             jniLibs.srcDir("build/generated/jniLibs")
             assets.srcDir("build/generated/assets")
         }

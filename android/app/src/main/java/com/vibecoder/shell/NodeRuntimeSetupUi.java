@@ -13,7 +13,10 @@ import android.widget.TextView;
 import java.util.Locale;
 
 final class NodeRuntimeSetupUi {
-    interface Callbacks { void onStartSetup(); void onCancelSetup(); }
+    interface Callbacks {
+        void onStartSetup();
+        void onCancelSetup();
+    }
 
     private final LinearLayout root;
     private final TextView status;
@@ -24,7 +27,7 @@ final class NodeRuntimeSetupUi {
     private final Button cancel;
     private long lastSampleBytes = -1L;
     private long lastSampleAtMs = -1L;
-    private double smoothedBytesPerSecond = 0.0;
+    private double smoothedBytesPerSecond;
 
     NodeRuntimeSetupUi(Activity activity, Callbacks callbacks) {
         root = new LinearLayout(activity);
@@ -33,17 +36,22 @@ final class NodeRuntimeSetupUi {
         root.setPadding(48, 72, 48, 48);
         root.setBackgroundColor(0xff111318);
 
-        TextView title = text(activity, "Welcome to VibeCoder", 26, true);
+        TextView title = text(activity, "Set up VibeCoder", 26, true);
         root.addView(title, matchWrap());
-        TextView intro = text(activity, "Preparing local coding environment…", 16, false);
-        intro.setPadding(0, 18, 0, 32);
+
+        TextView intro = text(activity,
+                "One runtime is downloaded once before local AI starts.", 16, false);
+        intro.setPadding(0, 18, 0, 30);
         root.addView(intro, matchWrap());
 
         TextView requirements = text(activity,
-                "Required runtime\n✓ Jcode\n✓ OmniRoute\n• Node.js Android Runtime 24.19.0 (packaged)", 16, false);
+                "Already inside the app\n✓ Jcode\n✓ OmniRoute\n\nFirst-time setup\n⬇ Node.js Android Runtime "
+                        + NodeRuntimeDeliveryManager.NODE_VERSION,
+                16,
+                false);
         root.addView(requirements, matchWrap());
 
-        status = text(activity, "Node.js runtime is not installed.", 15, true);
+        status = text(activity, "Node.js runtime is ready to download.", 15, true);
         status.setPadding(0, 36, 0, 12);
         root.addView(status, matchWrap());
 
@@ -55,18 +63,20 @@ final class NodeRuntimeSetupUi {
         progressText = text(activity, "0%", 15, true);
         progressText.setPadding(0, 12, 0, 4);
         root.addView(progressText, matchWrap());
-        bytesText = text(activity, "Development APKs use the packaged Node runtime; Google Play is not required.", 13, false);
+
+        bytesText = text(activity,
+                "The runtime is downloaded directly from the VibeCoder GitHub release.", 13, false);
         root.addView(bytesText, matchWrap());
 
         primary = new Button(activity);
-        primary.setText("Start Setup");
+        primary.setText("Download & Set Up Node.js");
         primary.setOnClickListener(v -> callbacks.onStartSetup());
         LinearLayout.LayoutParams buttonParams = matchWrap();
         buttonParams.topMargin = 32;
         root.addView(primary, buttonParams);
 
         cancel = new Button(activity);
-        cancel.setText("Cancel Download");
+        cancel.setText("Cancel");
         cancel.setVisibility(View.GONE);
         cancel.setOnClickListener(v -> callbacks.onCancelSetup());
         root.addView(cancel, matchWrap());
@@ -81,60 +91,78 @@ final class NodeRuntimeSetupUi {
             status.setText("Node.js runtime ready ✓");
             progress.setProgress(100);
             progressText.setText("100%");
+            bytesText.setText("Setup complete. Starting VibeCoder…");
             primary.setEnabled(false);
             cancel.setVisibility(View.GONE);
             return;
         }
-        boolean active = state.status.equals("pending") || state.status.equals("downloading")
-                || state.status.equals("installing") || state.status.equals("cancelling");
+
+        boolean active = "preparing".equals(state.status)
+                || "downloading".equals(state.status)
+                || "downloaded".equals(state.status)
+                || "awaiting_permission".equals(state.status)
+                || "awaiting_confirmation".equals(state.status)
+                || "installing".equals(state.status)
+                || "restart_required".equals(state.status)
+                || "cancelling".equals(state.status);
         primary.setEnabled(!active);
-        primary.setText(state.status.equals("failed") || state.status.equals("cancelled") ? "Retry Setup" : "Start Setup");
-        cancel.setVisibility(active ? View.VISIBLE : View.GONE);
+        primary.setText("failed".equals(state.status) || "cancelled".equals(state.status)
+                ? "Retry Node.js Setup"
+                : "Download & Set Up Node.js");
+        cancel.setVisibility(("downloading".equals(state.status) || "preparing".equals(state.status))
+                ? View.VISIBLE : View.GONE);
+
         int percent = state.totalBytes > 0L ? state.percent : 0;
         progress.setProgress(percent);
-        progressText.setText(state.totalBytes > 0L ? percent + "%"
-                : (NodeRuntimeDeliveryManager.DEVELOPMENT_PACKAGED_NODE_ONLY
-                        ? "Checking packaged runtime…" : "Waiting for Google Play…"));
+        progressText.setText(state.totalBytes > 0L ? percent + "%" : statusProgressText(state.status));
+
         if (state.totalBytes > 0L) {
             long remaining = Math.max(0L, state.totalBytes - state.downloadedBytes);
             updateRateSample(state);
             String rateAndEta = formatRateAndEta(remaining);
             bytesText.setText(String.format(Locale.ROOT, "%s / %s · %s remaining%s",
-                    formatBytes(state.downloadedBytes), formatBytes(state.totalBytes), formatBytes(remaining), rateAndEta));
+                    formatBytes(state.downloadedBytes),
+                    formatBytes(state.totalBytes),
+                    formatBytes(remaining),
+                    rateAndEta));
         } else {
             resetRateSample();
-            bytesText.setText(NodeRuntimeDeliveryManager.DEVELOPMENT_PACKAGED_NODE_ONLY
-                    ? "Development APKs use the packaged Node runtime; Google Play is not required."
-                    : "Download size is provided by Google Play when setup starts.");
+            bytesText.setText(descriptionFor(state.status));
         }
+
         switch (state.status) {
-            case "pending": status.setText("Preparing Node.js runtime download…"); break;
+            case "preparing": status.setText("Preparing Node.js download…"); break;
             case "downloading": status.setText("Downloading Node.js runtime…"); break;
-            case "installing": status.setText("Installing verified Play-delivered runtime…"); break;
+            case "downloaded": status.setText("Download complete. Verifying runtime…"); break;
+            case "awaiting_permission": status.setText("Allow VibeCoder to install its Node.js runtime once."); break;
+            case "awaiting_confirmation": status.setText("Confirm the Node.js runtime installation."); break;
+            case "installing": status.setText("Installing Node.js runtime…"); break;
+            case "restart_required": status.setText("Node.js installed. Restarting VibeCoder…"); break;
             case "cancelling": status.setText("Cancelling setup…"); break;
-            case "cancelled": status.setText("Node.js runtime setup cancelled."); break;
-            case "failed":
-                if ("node_runtime_missing_from_development_apk".equals(state.error)) {
-                    status.setText("This development APK is missing the packaged Node.js runtime.");
-                    progressText.setText("Install the Development Alpha APK");
-                    bytesText.setText("No Google Play download is used during development.");
-                    primary.setEnabled(false);
-                } else if ("node_runtime_play_app_not_owned_use_sideload_alpha".equals(state.error)) {
-                    status.setText("This base APK cannot download Node from Google Play.");
-                    progressText.setText("Use the Sideload Alpha APK");
-                    bytesText.setText("The sideload build contains the verified Node.js runtime locally and does not require Play ownership.");
-                    primary.setEnabled(false);
-                } else if ("node_runtime_play_store_unavailable".equals(state.error)) {
-                    status.setText("Google Play is unavailable for Node.js delivery.");
-                    bytesText.setText("Install the Sideload Alpha APK for local testing, or install the Play build through Google Play.");
-                } else {
-                    status.setText("Setup failed: " + safe(state.error));
-                }
-                break;
+            case "cancelled": status.setText("Node.js setup cancelled."); break;
+            case "failed": status.setText("Setup failed: " + safe(state.error)); break;
             default: status.setText("Node.js runtime is required before local AI startup.");
         }
     }
 
+    private static String statusProgressText(String state) {
+        if ("installing".equals(state) || "awaiting_confirmation".equals(state)) return "Installing…";
+        if ("awaiting_permission".equals(state)) return "Permission required";
+        if ("restart_required".equals(state)) return "Restarting…";
+        return "0%";
+    }
+
+    private static String descriptionFor(String state) {
+        if ("awaiting_permission".equals(state)) {
+            return "Android may ask once for permission to install the downloaded VibeCoder runtime.";
+        }
+        if ("awaiting_confirmation".equals(state)) {
+            return "Approve the Android installer prompt; setup continues automatically afterwards.";
+        }
+        if ("installing".equals(state)) return "Adding Node.js to this VibeCoder installation.";
+        if ("restart_required".equals(state)) return "The runtime is installed and will be visible after restart.";
+        return "The runtime is downloaded directly from the VibeCoder GitHub release.";
+    }
 
     private void updateRateSample(NodeRuntimeDeliveryManager.State state) {
         long now = SystemClock.elapsedRealtime();
@@ -169,16 +197,25 @@ final class NodeRuntimeSetupUi {
         smoothedBytesPerSecond = 0.0;
     }
 
-    private static String safe(String value) { return value == null || value.isEmpty() ? "unknown_error" : value; }
+    private static String safe(String value) {
+        return value == null || value.isEmpty() ? "unknown_error" : value;
+    }
+
     private static String formatBytes(long bytes) {
         double mib = bytes / (1024.0 * 1024.0);
         return String.format(Locale.ROOT, mib >= 10.0 ? "%.0f MB" : "%.1f MB", mib);
     }
+
     private static TextView text(Activity activity, String value, int sp, boolean bold) {
         TextView view = new TextView(activity);
-        view.setText(value); view.setTextSize(sp); view.setTextColor(0xfff4f5f7);
+        view.setText(value);
+        view.setTextSize(sp);
+        view.setTextColor(0xfff4f5f7);
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
     }
-    private static LinearLayout.LayoutParams matchWrap() { return new LinearLayout.LayoutParams(-1, -2); }
+
+    private static LinearLayout.LayoutParams matchWrap() {
+        return new LinearLayout.LayoutParams(-1, -2);
+    }
 }

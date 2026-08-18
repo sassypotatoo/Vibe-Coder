@@ -53,13 +53,9 @@ pub enum RuntimePlacement {
     ApkNativeLibrary,
     /// A package-installed native file that the Android adapter intends to invoke as a process.
     ApkNativeExecutable,
-    /// Native executable delivered by a Google Play on-demand feature split. It remains package
+    /// Native executable delivered later as a verified package-installed split. It remains package
     /// installed code and must never be copied into writable app data for execution.
-    PlayFeatureNativeExecutable,
-    /// Native executable delivered as a signed Android package split outside Google Play. The
-    /// package manager installs it into a package-owned executable location; writable app data is
-    /// never used as an execution root.
-    PackageSplitNativeExecutable,
+    DownloadedPackageSplitNativeExecutable,
     /// Non-executable bytes shipped with the app and optionally materialized as data.
     ApkAsset,
     /// Writable app-private data. Never valid for native code or a process executable.
@@ -398,21 +394,17 @@ fn validate_component(component: &RuntimeComponentSpec) -> Result<()> {
             }
         }
         RuntimeArtifactKind::NativeExecutable => {
-            if !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable)
+            if !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::DownloadedPackageSplitNativeExecutable)
                 || component.relative_path.is_none()
                 || !component.requires_exec_probe
                 || !component.requires_16k_page_compatibility
             {
                 return Err(packaging_error("runtime_native_executable_placement_invalid"));
             }
-            if matches!(component.placement, RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable) {
+            if component.placement == RuntimePlacement::DownloadedPackageSplitNativeExecutable {
                 let module = component.delivery_module.as_deref().unwrap_or("");
                 if module.is_empty() || module.len() > 128 || component.bundled_in_base != Some(false) {
-                    return Err(packaging_error(if component.placement == RuntimePlacement::PlayFeatureNativeExecutable {
-                        "runtime_play_feature_delivery_invalid"
-                    } else {
-                        "runtime_package_split_delivery_invalid"
-                    }));
+                    return Err(packaging_error("runtime_package_split_delivery_invalid"));
                 }
             }
         }
@@ -573,7 +565,7 @@ mod tests {
                     version_requirement: ">=22.22.2 <23 || >=24.0.0 <27".into(),
                     version_requirement_pinned: true,
                     artifact_kind: RuntimeArtifactKind::NativeExecutable,
-                    placement: RuntimePlacement::PlayFeatureNativeExecutable,
+                    placement: RuntimePlacement::DownloadedPackageSplitNativeExecutable,
                     delivery_module: Some("node_runtime".into()),
                     bundled_in_base: Some(false),
                     relative_path: Some("libvibecoder_node_exec.so".into()),

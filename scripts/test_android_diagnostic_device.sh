@@ -7,7 +7,7 @@ PACKAGE="com.vibecoder.shell"
 ACTIVITY="com.vibecoder.shell/.MainActivity"
 REPORT_REL="files/vibecoder-diagnostic-result.json"
 fail() { printf 'test_android_diagnostic_device: %s\n' "$1" >&2; exit 1; }
-[[ "$MODE" == "minimal" || "$MODE" == "jcode" || "$MODE" == "node" || "$MODE" == "omniroute_asset" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" || "$MODE" == "sideload_alpha" ]] || fail "mode_must_be_minimal_jcode_node_omniroute_asset_omniroute_service_omniroute_gateway_omniroute_inference_alpha_or_sideload_alpha"
+[[ "$MODE" == "minimal" || "$MODE" == "jcode" || "$MODE" == "node" || "$MODE" == "omniroute_asset" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" ]] || fail "mode_must_be_minimal_jcode_node_omniroute_asset_omniroute_service_omniroute_gateway_omniroute_inference_or_alpha"
 [[ -f "$APK" && -s "$APK" ]] || fail "apk_missing_or_empty:$APK"
 command -v adb >/dev/null 2>&1 || fail "adb_not_found"
 command -v python3 >/dev/null 2>&1 || fail "python3_not_found"

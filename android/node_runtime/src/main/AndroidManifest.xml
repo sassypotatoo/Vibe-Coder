@@ -5,7 +5,9 @@
         dist:instant="false"
         dist:title="@string/node_runtime_feature_name">
         <dist:delivery>
-            <dist:on-demand />
+            <dist:install-time>
+                <dist:removable dist:value="true" />
+            </dist:install-time>
         </dist:delivery>
         <dist:fusing dist:include="false" />
     </dist:module>

@@ -170,8 +170,6 @@ GENERATED_PATH_PREFIXES = (
     "android/app/.cxx/",
     "android/node_runtime/build/",
     "android/node_runtime/.cxx/",
-    "android/jcode_runtime/build/",
-    "android/jcode_runtime/.cxx/",
     "android/.gradle/",
     "target/",
     ".toolchains/",
@@ -3274,7 +3272,7 @@ def check_part26_android_runtime_packaging() -> None:
         "runtime_16k_page_compatibility_unproven",
         "pub fn backend_ready(&self) -> bool",
         "RuntimeArtifactKind::NativeExecutable",
-        "RuntimePlacement::PlayFeatureNativeExecutable",
+        "RuntimePlacement::DownloadedPackageSplitNativeExecutable",
     ):
         if token not in source:
             fail(f"Part 26 readiness boundary missing: {token}")
@@ -3493,12 +3491,8 @@ def check_part28_android_shell() -> None:
         fail("Part 29 exact Jcode source tag/commit drifted")
     if jcode.get("rust_target") != "aarch64-linux-android":
         fail("Part 29 Jcode Android Rust target drifted")
-    if jcode.get("status") != "prebuilt_once_then_downloaded_as_signed_package_split_during_setup":
-        fail("Part 29/34 Jcode provisioning must reflect the reusable signed runtime split")
-    if jcode.get("delivery") != "github_release_signed_package_split" or jcode.get("module") != "jcode_runtime":
-        fail("Part 34.10.18 Jcode downloadable package-split identity drifted")
-    if jcode.get("runtime_release_tag") != "vibecoder-jcode-runtime-0.73.0-dev-v33":
-        fail("Part 34.10.18 Jcode runtime release tag drifted")
+    if jcode.get("status") != "exact_source_checkout_required_for_android_cross_compile":
+        fail("Part 29 Jcode must remain source-build-required until real cross-compile proof")
     node = payloads.get("node", {})
     if node.get("version") != "24.19.0":
         fail("Part 28 Node version pin drifted")
@@ -3506,10 +3500,12 @@ def check_part28_android_shell() -> None:
         fail("Part 28 Node source SHA-256 drifted")
     if node.get("source_url") != "https://nodejs.org/download/release/v24.19.0/node-v24.19.0.tar.xz":
         fail("Part 28 Node source URL drifted")
-    if node.get("status") != "verified_prebuilt_staged_into_development_base_apk":
-        fail("Part 28/34 Node provisioning status must reflect the development base APK")
-    if node.get("delivery") != "development_base_apk":
-        fail("Part 34.10.18 Node development delivery identity drifted")
+    if node.get("status") != "downloadable_runtime_release_built_separately":
+        fail("Part 28/34 Node provisioning status must reflect separately built downloadable runtime")
+    if node.get("delivery") != "github_release_packageinstaller_split" or node.get("split") != "node_runtime":
+        fail("Part 34.10.15 Node direct-download delivery identity drifted")
+    if node.get("release_tag") != "vibecoder-node-runtime-24.19.0-v31" or node.get("runtime_apk") != "vibecoder-node-runtime-arm64-v31.apk":
+        fail("Part 34.10.15 Node runtime release identity drifted")
     omni = payloads.get("omniroute", {})
     if omni.get("version") != "3.8.50" or omni.get("sha256") != EXPECTED_OMNIROUTE_ARCHIVE:
         fail("Part 28 OmniRoute reviewed archive identity drifted")
@@ -3770,7 +3766,7 @@ def check_part29_jcode_android_packaging() -> None:
         'uses: gradle/actions/setup-gradle@v6',
         'uses: actions/upload-artifact@v7',
         'name: Minimal diagnostic APK',
-        'name: Ensure downloadable Jcode 0.73.0 runtime split',
+        'name: Exact Jcode Android cross-compile + APK',
         'scripts/build_jcode_android.sh',
     ):
         if token not in workflow:
@@ -3851,10 +3847,9 @@ def check_part30_android_device_proof() -> None:
     # command spelling or artifact names.
     for token in (
         'bash scripts/part31_build_and_verify.sh minimal',
-        'jcode-runtime-release:',
+        'bash scripts/part31_build_and_verify.sh jcode',
         'bash scripts/fetch_jcode_android_source.sh',
         'bash scripts/build_jcode_android.sh',
-        'bash scripts/build_jcode_runtime_release.sh',
         'actions/upload-artifact@v7',
     ):
         if token not in workflow:
@@ -3862,9 +3857,8 @@ def check_part30_android_device_proof() -> None:
     build_lane = read("scripts/part31_build_and_verify.sh")
     if 'verify_android_diagnostic_apk.sh" "$APK" "$MODE"' not in build_lane:
         fail("Part 30 APK verifier is no longer enforced by the Part 31 build lane")
-    code_match = re.search(r"versionCode\s*=\s*(\d+)", app_gradle)
-    if code_match is None or int(code_match.group(1)) < 31:
-        fail("Part 31 diagnostic shell version baseline regressed")
+    if 'versionCode = 31' not in app_gradle or 'versionName = "0.31.0"' not in app_gradle:
+        fail("Part 31 diagnostic shell version was not advanced")
     if 'useLegacyPackaging = true' not in app_gradle:
         fail("Part 30 APK packaging must request extracted JNI libraries")
     if 'useLegacyPackagingFromBundle' in app_gradle:
@@ -3910,17 +3904,16 @@ def check_part31_first_android_apk() -> None:
     security = read("docs/SECURITY_INVARIANTS.md")
 
     # The reviewed command-line-tools identity must be the one CI actually installs.
-    if combined_workflows.count('cmdline-tools-version: "15859902"') != 5:
-        fail("Part 31/34 CI does not pin command-line-tools 15859902 across the four app jobs plus dedicated Node runtime workflow")
+    if combined_workflows.count('cmdline-tools-version: "15859902"') != 4:
+        fail("Part 31/34 CI does not pin command-line-tools 15859902 across the three app jobs plus dedicated Node runtime job")
     for token in (
         'accept-android-sdk-licenses: true',
         'log-accepted-android-sdk-licenses: false',
         'bash scripts/part31_build_and_verify.sh minimal',
+        'bash scripts/part31_build_and_verify.sh jcode',
         'vibecoder-part31-minimal-diagnostic-apk',
+        'vibecoder-part31-jcode-diagnostic-apk',
         'android/app/build/outputs/vibecoder-part31-build-evidence.json',
-        'jcode-runtime-release:',
-        'Ensure downloadable Jcode 0.73.0 runtime split',
-        'scripts/build_jcode_runtime_release.sh',
         'config/android-diagnostic-signing.json',
         'push:',
         'pull_request:',
@@ -3955,8 +3948,8 @@ def check_part31_first_android_apk() -> None:
         if token not in evidence:
             fail(f"Part 31 build evidence contract missing: {token}")
 
-    if 'versionCode = 33' not in app_gradle or 'versionName = "0.33.0-dev"' not in app_gradle:
-        fail("Part 34.10.18 development base/split version identity drifted")
+    if 'versionCode = 31' not in app_gradle or 'versionName = "0.31.0"' not in app_gradle:
+        fail("Part 31 Android diagnostic version identity drifted")
     expected_cert = "9d73bfaeb16e706723bfc417ce43a9ed6b10286835e8a3050a8ddded67506445"
     expected_keystore = "8144fe738427be8e69e2a880fcefa170daecbddaad3929f7639d628bb14395a6"
     if signing_config.get("certificate_sha256") != expected_cert or signing_config.get("keystore_sha256") != expected_keystore:
@@ -4345,34 +4338,28 @@ def check_part34_2_node_staging_lane() -> None:
     if local_attempt.get('execution_log_sha256') != expected_attempt_log_sha:
         fail("Part 34.2.3 preserved local execution log hash mismatch")
 
-    # The dedicated proof workflow remains reproducible for publishing later. During the current
-    # development phase the normal diagnostic workflow also builds Node so its Alpha APK is directly
-    # installable without Google Play ownership or split delivery.
+    # The expensive Node source build is isolated from normal app CI. The dedicated runtime
+    # workflow checks a fixed GitHub release first and cross-compiles only when that release is absent.
     for token in (
         'ANDROID_NDK_VERSION: "28.2.13676358"',
         'VIBECODER_ANDROID_API: "29"',
-        'node-android-proof-build:',
-        'Exact Node 24.19.0 Android cross-compile',
+        'node-runtime-release:',
+        'Ensure downloadable Node 24.19.0 runtime exists',
+        'Check fixed downloadable runtime release',
+        "steps.runtime_release.outputs.exists != 'true'",
         'export VIBECODER_BUILD_JOBS="4"',
         'bash scripts/part34_node_execute_cross_build.sh',
         'vibecoder-part34-node-cross-build-evidence.json',
-        'vibecoder-part34-node-configure.log',
-        'vibecoder-part34-node-make.log',
-        'name: vibecoder-node-24.19.0-android-arm64',
-        'if: failure()',
-        'name: vibecoder-node-24.19.0-failure-logs',
+        'package_node_runtime_release.sh',
+        'gh release create',
+        'gh release upload',
+        'name: vibecoder-node-runtime-download-package',
+        'name: vibecoder-node-runtime-download-failure',
     ):
         if token not in node_runtime_workflow:
-            fail(f"Part 34.2.3 dedicated Node CI execution contract missing: {token}")
-    for token in (
-        'node-android-proof-build:',
-        'Cross-compile exact Node 24.19.0 for Android Bionic',
-        'vibecoder-node-24.19.0-android-arm64-development',
-        'needs: [jcode-runtime-release, node-android-proof-build]',
-        'vibecoder-part34-development-alpha-apk',
-    ):
-        if token not in workflow:
-            fail(f"Part 34.10.18 development Node/Jcode delivery CI contract missing: {token}")
+            fail(f"Part 34.2.3 dedicated Node downloadable-runtime CI contract missing: {token}")
+    if 'bash scripts/part34_node_execute_cross_build.sh' in workflow:
+        fail("Part 34.10.15 normal app CI must not rebuild Node on every commit")
 
     part = state.get('part34_2_node_runtime', {})
     expected = {
@@ -4498,8 +4485,8 @@ def check_part31_review_fixes() -> None:
     if 'useLegacyPackaging = true' not in app_build:
         fail("Reviewed Android native/executable packaging contract missing from app Gradle config")
     for token in (
-        'File installedJcodeRoot = resolveInstalledJcodeDirectory();',
-        'File packagedExecutableRoot = installedJcodeRoot == null ? nativeRoot : installedJcodeRoot;',
+        'File installedNodeRoot = resolveInstalledNodeDirectory();',
+        'File packagedExecutableRoot = installedNodeRoot == null ? nativeRoot : installedNodeRoot;',
         'packagedExecutableRoot.getCanonicalPath()',
     ):
         if token not in main_activity:
@@ -6468,9 +6455,6 @@ def check_part34_3_omniroute_source_admission() -> None:
         ".github/workflows/android-diagnostic-apk.yml": (
             "test_part34_3_android_stub_compat.py",
         ),
-        ".github/workflows/android-play-bundle.yml": (
-            "test_part34_3_android_stub_compat.py",
-        ),
         "scripts/test_part34_3_live_build_logging.py": (
             "Part 34.3 live build logging regression PASSED",
             "child-stdout",
@@ -6701,57 +6685,6 @@ def check_part34_aapt_transparency_repair() -> None:
         fail("Part 34 AAPT asset policy is not the transparent sentinel")
 
 
-def check_part34_sideload_alpha_repair() -> None:
-    diag = read(".github/workflows/android-diagnostic-apk.yml")
-    alpha = read("scripts/part34_alpha_build_and_verify.sh")
-    evidence = read("scripts/write_alpha_build_evidence.py")
-    apk_verify = read("scripts/verify_android_diagnostic_apk.sh")
-    jcode_delivery = read("android/app/src/main/java/com/vibecoder/shell/JcodeRuntimeDeliveryManager.java")
-    jcode_receiver = read("android/app/src/main/java/com/vibecoder/shell/JcodeRuntimeInstallReceiver.java")
-    jcode_ui = read("android/app/src/main/java/com/vibecoder/shell/JcodeRuntimeSetupUi.java")
-    descriptor = json.loads(read("android/app/src/main/assets/runtime/jcode-runtime-download.json"))
-    app_gradle = read("android/app/build.gradle.kts")
-    settings = read("android/settings.gradle.kts")
-    for token, label, haystack in (
-        ("jcode-runtime-release:", "reusable Jcode runtime release job", diag),
-        ("Ensure downloadable Jcode 0.73.0 runtime split", "Jcode release job name", diag),
-        ("gh release download", "Jcode release reuse", diag),
-        ("bash scripts/build_jcode_runtime_release.sh", "Jcode runtime split build fallback", diag),
-        ("needs: [jcode-runtime-release, node-android-proof-build]", "Alpha runtime dependencies", diag),
-        ("Development Alpha APK (Jcode downloads in setup; Node packaged)", "development Alpha job", diag),
-        ("vibecoder-part34-development-alpha-apk", "development Alpha artifact", diag),
-        ('verify_android_diagnostic_apk.sh" "$APK" development_alpha_download_jcode', "development APK verifier", alpha),
-        ("jcode_must_not_be_bundled_in_development_base_apk", "base Jcode exclusion", alpha),
-        ("libvibecoder_node_exec.so", "packaged Node requirement", alpha),
-        ("development_base_apk_with_node_and_downloadable_signed_jcode_split", "development delivery evidence", evidence),
-        ("signed_package_split_download_during_setup", "Jcode split evidence", evidence),
-        ("development_alpha_download_jcode", "Jcode-download verifier mode", apk_verify),
-        ("PackageInstaller.SessionParams.MODE_INHERIT_EXISTING", "package-split installation mode", jcode_delivery),
-        ("Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES", "unknown-source permission flow", jcode_delivery),
-        ("STATUS_PENDING_USER_ACTION", "system confirmation flow", jcode_receiver),
-        ("Downloading Jcode runtime", "Jcode setup UI", jcode_ui),
-        ('dynamicFeatures += setOf(":jcode_runtime")', "Jcode dynamic feature declaration", app_gradle),
-        ('include(":jcode_runtime")', "Jcode feature module inclusion", settings),
-    ):
-        if token not in haystack:
-            fail(f"Part 34.10.18 downloadable Jcode repair missing {label}: {token}")
-    expected_descriptor = {
-        "schema": 1,
-        "component_id": "jcode",
-        "version": "0.73.0",
-        "base_version_code": 33,
-        "split_name": "jcode_runtime",
-        "abi": "arm64-v8a",
-        "release_tag": "vibecoder-jcode-runtime-0.73.0-dev-v33",
-        "download_url": "https://github.com/sassypotatoo/Vibe-Coder/releases/download/vibecoder-jcode-runtime-0.73.0-dev-v33/vibecoder-jcode-runtime-arm64-v8a.apk",
-    }
-    for key, expected in expected_descriptor.items():
-        if descriptor.get(key) != expected:
-            fail(f"Part 34.10.18 Jcode runtime descriptor drifted: {key}={descriptor.get(key)!r}")
-    if "libvibecoder_jcode_exec.so" in read("scripts/part34_alpha_build_and_verify.sh").split("run_stage android-host-build", 1)[0] and "jcode_must_not_be_bundled" not in alpha:
-        fail("Part 34.10.18 development Alpha lost the explicit base-Jcode exclusion guard")
-
-
 def check_checksum_manifest() -> None:
     manifest = require("CHECKSUMS.sha256")
     listed: set[str] = set()
@@ -6831,7 +6764,6 @@ def main() -> int:
     check_part31_review_fixes()
     check_project_state_and_docs()
     check_part34_aapt_transparency_repair()
-    check_part34_sideload_alpha_repair()
     check_checksum_manifest()
 
     if ERRORS:

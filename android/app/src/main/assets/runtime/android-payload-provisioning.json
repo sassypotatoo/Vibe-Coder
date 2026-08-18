@@ -26,34 +26,34 @@
       "source_commit": "44ffa55281fad71c02be984c0674d92412210452",
       "source_repository": "https://github.com/1jehuang/jcode.git",
       "source_tag": "v0.73.0",
-      "status": "prebuilt_once_then_downloaded_as_signed_package_split_during_setup",
-      "version": "0.73.0",
-      "delivery": "github_release_signed_package_split",
-      "module": "jcode_runtime",
-      "runtime_release_tag": "vibecoder-jcode-runtime-0.73.0-dev-v33"
+      "status": "exact_source_checkout_required_for_android_cross_compile",
+      "version": "0.73.0"
     },
     {
       "component_id": "node",
+      "delivery": "github_release_packageinstaller_split",
       "output": "libvibecoder_node_exec.so",
+      "release_tag": "vibecoder-node-runtime-24.19.0-v31",
+      "runtime_apk": "vibecoder-node-runtime-arm64-v31.apk",
       "sha256": "f6d95e10a0431ee1067fc6aabe9f762908b4716dd35324e1ddb4b1466b76659f",
       "source_url": "https://nodejs.org/download/release/v24.19.0/node-v24.19.0.tar.xz",
-      "status": "verified_prebuilt_staged_into_development_base_apk",
-      "version": "24.19.0",
-      "delivery": "development_base_apk"
+      "split": "node_runtime",
+      "status": "downloadable_runtime_release_built_separately",
+      "version": "24.19.0"
     },
     {
       "asset": "omniroute/bundle",
       "bundle_manifest": "omniroute/bundle/.vibecoder-omniroute-bundle.json",
       "component_id": "omniroute",
+      "reviewed_archive_sha256": "1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7",
+      "reviewed_git_commit": "ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f",
       "runtime_profile": "config/omniroute-android-runtime-profile.json",
       "sha256": "1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7",
       "source_archive": "OmniRoute-release-v3.8.50.zip",
-      "status": "reviewed_source_verified_android_runtime_build_required",
-      "version": "3.8.50",
-      "source_repository": "https://github.com/diegosouzapw/OmniRoute",
       "source_ref": "release/v3.8.50",
-      "reviewed_git_commit": "ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f",
-      "reviewed_archive_sha256": "1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7"
+      "source_repository": "https://github.com/diegosouzapw/OmniRoute",
+      "status": "reviewed_source_verified_android_runtime_build_required",
+      "version": "3.8.50"
     }
   ],
   "schema": 1,

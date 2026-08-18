@@ -1,53 +1,58 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib,json,re,subprocess,sys,tempfile,zipfile
+import hashlib, json, re, subprocess, sys, tempfile, zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 WRITER=ROOT/'scripts/write_alpha_build_evidence.py'
 APP_GRADLE=ROOT/'android/app/build.gradle.kts'
-AAPT='__vibecoder_aapt_ignore_none__'
-assignments=re.findall(r'androidResources\.ignoreAssetsPattern\s*=\s*"([^"]*)"',APP_GRADLE.read_text())
-if assignments!=[AAPT]: raise SystemExit('alpha_aapt_policy_missing')
-alpha=(ROOT/'scripts/part34_alpha_build_and_verify.sh').read_text()
-for token in ('omniroute-aapt-policy','libvibecoder_node_exec.so','verify_node_cross_build_evidence.py','development_alpha_download_jcode','jcode_must_not_be_bundled_in_development_base_apk'):
-    if token not in alpha: raise SystemExit('development_alpha_contract_missing:'+token)
+AAPT_TRANSPARENT_PATTERN='__vibecoder_aapt_ignore_none__'
 
-def sha(b): return hashlib.sha256(b).hexdigest()
+gradle_text=APP_GRADLE.read_text(encoding='utf-8')
+assignments=re.findall(r'androidResources\.ignoreAssetsPattern\s*=\s*"([^"]*)"',gradle_text)
+if assignments != [AAPT_TRANSPARENT_PATTERN]:
+    raise SystemExit(f'alpha_aapt_transparent_omniroute_asset_policy_missing:{assignments}')
+alpha_lane=(ROOT/'scripts/part34_alpha_build_and_verify.sh').read_text(encoding='utf-8')
+if 'run_stage omniroute-aapt-policy 60 python3 "$ROOT/scripts/verify_omniroute_aapt_asset_policy.py"' not in alpha_lane:
+    raise SystemExit('alpha_aapt_pre_gradle_transparency_gate_missing')
+
+def sha(data: bytes) -> str: return hashlib.sha256(data).hexdigest()
 def run(args): return subprocess.run(args,cwd=ROOT,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-with tempfile.TemporaryDirectory(prefix='vibecoder-alpha-download-jcode-') as td:
-    t=Path(td)
+
+with tempfile.TemporaryDirectory(prefix='vibecoder-alpha-evidence-test-') as td:
+    tmp=Path(td)
     payloads={
-      'lib/arm64-v8a/libvibecoder_shell_jni.so':b'jni',
-      'lib/arm64-v8a/libvibecoder_android_host.so':b'host',
-      'lib/arm64-v8a/libvibecoder_node_exec.so':b'node',
+        'lib/arm64-v8a/libvibecoder_shell_jni.so':b'jni-fixture',
+        'lib/arm64-v8a/libvibecoder_android_host.so':b'host-fixture',
+        'lib/arm64-v8a/libvibecoder_jcode_exec.so':b'jcode-fixture',
     }
-    omni={'component_id':'omniroute','version':'3.8.50','tree_sha256':'0'*64,'file_count':1,'total_bytes':1}
-    desc={'schema':1,'component_id':'jcode','version':'0.73.0','application_id':'com.vibecoder.shell','base_version_code':33,'split_name':'jcode_runtime','abi':'arm64-v8a','release_tag':'vibecoder-jcode-runtime-0.73.0-dev-v33','download_url':'https://github.com/sassypotatoo/Vibe-Coder/releases/download/vibecoder-jcode-runtime-0.73.0-dev-v33/vibecoder-jcode-runtime-arm64-v8a.apk'}
-    apk=t/'fixture.apk'
-    with zipfile.ZipFile(apk,'w') as z:
-        for n,b in payloads.items(): z.writestr(n,b)
-        z.writestr('assets/omniroute/bundle/.vibecoder-omniroute-bundle.json',json.dumps(omni))
-        z.writestr('assets/runtime/jcode-runtime-download.json',json.dumps(desc))
-    node_ev={'step':'34.2.3','node':{'version':'24.19.0','output_sha256':sha(payloads['lib/arm64-v8a/libvibecoder_node_exec.so'])},'target':{'os':'android','abi':'arm64-v8a','libc':'bionic'}}
-    ep=t/'node.json'; ep.write_text(json.dumps(node_ev)); out=t/'out.json'
-    ok=run([sys.executable,str(WRITER),str(apk),str(ep),str(out)])
-    if ok.returncode: raise SystemExit('alpha_evidence_fixture_failed:'+ok.stdout)
-    ev=json.loads(out.read_text())
-    assert ev['node']['bundled_in_base_apk'] is True
-    assert ev['node']['delivery']=='development_base_apk'
-    assert ev['jcode']['bundled_in_base_apk'] is False
-    assert ev['jcode']['delivery']=='signed_package_split_download_during_setup'
-    assert ev['jcode']['module']=='jcode_runtime'
-    # Reintroducing Jcode into base must be rejected.
-    bad=t/'bad.apk'
-    with zipfile.ZipFile(apk) as src, zipfile.ZipFile(bad,'w') as dst:
-        for info in src.infolist(): dst.writestr(info,src.read(info.filename))
-        dst.writestr('lib/arm64-v8a/libvibecoder_jcode_exec.so',b'jcode')
-    rej=run([sys.executable,str(WRITER),str(bad),str(ep),str(t/'bad.json')])
-    if rej.returncode==0 or 'jcode_must_not_be_bundled_in_development_base_apk' not in rej.stdout:
-        raise SystemExit('bundled_jcode_not_rejected:'+rej.stdout)
-    node_ev['node']['output_sha256']='f'*64; ep.write_text(json.dumps(node_ev))
-    rej=run([sys.executable,str(WRITER),str(apk),str(ep),str(t/'badnode.json')])
-    if rej.returncode==0 or 'node_cross_build_payload_mismatch' not in rej.stdout:
-        raise SystemExit('tampered_node_not_rejected:'+rej.stdout)
+    omni={'component_id':'omniroute','version':'3.8.50','profile_id':'vibecoder-omniroute-android-backend-v1',
+          'tree_sha256':'0'*64,'file_count':1,'total_bytes':1}
+    apk=tmp/'fixture.apk'
+    with zipfile.ZipFile(apk,'w') as zf:
+        for name,data in payloads.items(): zf.writestr(name,data)
+        zf.writestr('assets/omniroute/bundle/.vibecoder-omniroute-bundle.json',json.dumps(omni,separators=(',',':')))
+    source_sha=hashlib.sha256((ROOT/'CHECKSUMS.sha256').read_bytes()).hexdigest()
+    jcode={
+        'mode':'jcode','application_id':'com.vibecoder.shell',
+        'native_entries':[{'entry':'lib/arm64-v8a/libvibecoder_jcode_exec.so','size':len(payloads['lib/arm64-v8a/libvibecoder_jcode_exec.so']),'sha256':sha(payloads['lib/arm64-v8a/libvibecoder_jcode_exec.so'])}],
+        'source':{'checksums_sha256':source_sha},
+    }
+    jp=tmp/'jcode.json'; out=tmp/'out.json'
+    jp.write_text(json.dumps(jcode))
+    ok=run([sys.executable,str(WRITER),str(apk),str(jp),str(out)])
+    if ok.returncode != 0: raise SystemExit(f'alpha_evidence_success_fixture_failed:{ok.stdout}')
+    evidence=json.loads(out.read_text())
+    assert evidence['jcode']['payload_bound_to_proof_evidence'] is True
+    assert evidence['node']['delivery'] == 'github_release_packageinstaller_split'
+    assert evidence['node']['bundled_in_base_apk'] is False
+    assert evidence['jcode']['device_execution_proven'] is False
+    assert evidence['node']['device_execution_proven'] is False
+    assert evidence['omniroute']['device_service_round_trip_proven'] is False
+
+    jcode['native_entries'][0]['sha256']='f'*64
+    bad=tmp/'jcode-bad.json'; bad.write_text(json.dumps(jcode))
+    rejected=run([sys.executable,str(WRITER),str(apk),str(bad),str(tmp/'bad.json')])
+    if rejected.returncode == 0 or 'jcode_build_evidence_payload_mismatch' not in rejected.stdout:
+        raise SystemExit(f'alpha_evidence_tampered_jcode_not_rejected:{rejected.stdout}')
+
 print('Part 34.10.3 Alpha package evidence regression PASSED')

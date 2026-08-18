@@ -270,7 +270,7 @@ impl AndroidHostPaths {
     ///
     /// `native_library_dir` is the package-owned base native-library location. Base-delivered
     /// native executables such as Jcode resolve there as well. `packaged_executable_dir` is the
-    /// trusted package-owned execution root for Play-feature-delivered executables such as Node.
+    /// trusted package-owned execution root for downloaded package-split executables such as Node.
     /// Before an optional feature is installed the shell may pass the base native directory for
     /// both roots; normal chat startup supplies the installed Node feature root explicitly.
     pub fn new(
@@ -380,9 +380,9 @@ impl AndroidHostRuntime {
     /// Initialize the UI-free Android host from platform-owned roots.
     ///
     /// The Android shell provides its base native-library directory plus the package-owned
-    /// executable root used by on-demand runtime modules. No fallback to PATH, filesDir, cacheDir,
+    /// executable root used by downloaded package-split runtime modules. No fallback to PATH, filesDir, cacheDir,
     /// or copied writable code is permitted. Base native executables remain anchored to the base
-    /// native-library directory; Play-feature executables resolve only from the feature root.
+    /// native-library directory; downloaded package-split executables resolve only from the split root.
     pub fn initialize(
         paths: AndroidHostPaths,
         inventory: AndroidArm64RuntimeInventory,
@@ -469,8 +469,7 @@ impl AndroidHostRuntime {
             component.placement,
             RuntimePlacement::ApkNativeLibrary
                 | RuntimePlacement::ApkNativeExecutable
-                | RuntimePlacement::PlayFeatureNativeExecutable
-                | RuntimePlacement::PackageSplitNativeExecutable
+                | RuntimePlacement::DownloadedPackageSplitNativeExecutable
         ) {
             return Err(host_error("android_host_component_not_native"));
         }
@@ -498,9 +497,7 @@ impl AndroidHostRuntime {
             }
             RuntimeArtifactKind::NativeExecutable => match component.placement {
                 RuntimePlacement::ApkNativeExecutable => self.paths.native_library_dir(),
-                RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable => {
-                    self.paths.packaged_executable_dir()
-                },
+                RuntimePlacement::DownloadedPackageSplitNativeExecutable => self.paths.packaged_executable_dir(),
                 _ => return Err(host_error("android_host_native_executable_placement_invalid")),
             },
             _ => return Err(host_error("android_host_component_not_native")),
@@ -705,7 +702,7 @@ fn required_component<'a>(
 
 fn native_executable_relative_path(component: &RuntimeComponentSpec) -> Result<PathBuf> {
     if component.artifact_kind != RuntimeArtifactKind::NativeExecutable
-        || !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable)
+        || !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::DownloadedPackageSplitNativeExecutable)
     {
         return Err(host_error("android_host_runtime_tool_not_native_executable"));
     }
@@ -863,7 +860,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn node_play_feature_resolves_from_feature_root_not_base_native_root() {
+    fn node_downloaded_split_resolves_from_split_root_not_base_native_root() {
         let (root, app, native, exec) = temp_host_roots("node-feature-root");
         let expected = exec.join("libvibecoder_node_exec.so");
         fs::write(&expected, b"test-only-placeholder").expect("node placeholder");
@@ -874,7 +871,7 @@ mod tests {
         .expect("inventory");
         let host = AndroidHostRuntime::initialize(paths, inventory).expect("host");
         assert_eq!(
-            host.native_component_path(NODE_COMPONENT_ID).expect("Node feature path"),
+            host.native_component_path(NODE_COMPONENT_ID).expect("Node split path"),
             expected
         );
         let _ = fs::remove_dir_all(root);

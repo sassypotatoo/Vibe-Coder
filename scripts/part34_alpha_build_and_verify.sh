@@ -3,8 +3,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARCHIVE="${1:-$ROOT/.runtime-cache/OmniRoute-release-v3.8.50.zip}"
 GENERATED_JNI="$ROOT/android/app/build/generated/jniLibs/arm64-v8a"
-NODE="$GENERATED_JNI/libvibecoder_node_exec.so"
-NODE_EVIDENCE="$ROOT/android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json"
+JCODE="$GENERATED_JNI/libvibecoder_jcode_exec.so"
+JCODE_EVIDENCE="$ROOT/android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json"
 BUNDLE="$ROOT/android/app/build/generated/omnirouteBundle"
 OMNIROUTE_VERIFY_STAMP="$ROOT/android/app/build/outputs/vibecoder-part34-omniroute-verification-stamp.json"
 APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
@@ -27,13 +27,12 @@ run_stage() {
   printf '[part34-stage] DONE %s elapsed=%ss\n' "$label" "$elapsed"
 }
 
+
 python3 "$ROOT/scripts/validate_checkpoint.py"
 [[ -f "$ARCHIVE" && -s "$ARCHIVE" ]] || fail "reviewed_omniroute_archive_missing:$ARCHIVE"
-[[ -f "$NODE" && -s "$NODE" ]] || fail "node_payload_not_staged"
-[[ -f "$NODE_EVIDENCE" && -s "$NODE_EVIDENCE" ]] || fail "node_cross_build_evidence_missing"
-python3 "$ROOT/scripts/verify_android_elf.py" "$NODE" >/dev/null || fail "node_android_elf_invalid"
-python3 "$ROOT/scripts/verify_node_cross_build_evidence.py" "$NODE" "$NODE_EVIDENCE" >/dev/null || fail "node_cross_build_evidence_invalid"
-[[ ! -e "$GENERATED_JNI/libvibecoder_jcode_exec.so" ]] || fail "jcode_must_not_be_bundled_in_development_base_apk"
+[[ -f "$JCODE" && -s "$JCODE" ]] || fail "jcode_payload_not_staged"
+[[ -f "$JCODE_EVIDENCE" && -s "$JCODE_EVIDENCE" ]] || fail "jcode_build_evidence_missing"
+python3 "$ROOT/scripts/verify_android_elf.py" "$JCODE" >/dev/null || fail "jcode_android_elf_invalid"
 
 node_version="$(node --version 2>/dev/null || true)"
 [[ "$node_version" == "v24.19.0" ]] || fail "host_node_version_must_be_24_19_0:actual=${node_version:-missing}"
@@ -46,9 +45,11 @@ run_stage omniroute-build-and-verify 1200 python3 "$ROOT/scripts/build_omniroute
 run_stage omniroute-asset-stage 120 python3 "$ROOT/scripts/stage_omniroute_android_asset.py" "$BUNDLE" \
   --verification-stamp "$OMNIROUTE_VERIFY_STAMP" \
   --consume-verified-bundle
+
 run_stage omniroute-aapt-policy 60 python3 "$ROOT/scripts/verify_omniroute_aapt_asset_policy.py" \
   "$ROOT/android/app/build/generated/omnirouteAssets/omniroute/bundle"
 
+# Reconstruct the fixed diagnostic identity only at build time; no binary keystore is tracked.
 KEYSTORE_DIR="$ROOT/android/signing"
 KEYSTORE_FILE="$KEYSTORE_DIR/vibecoder-diagnostic-debug.jks"
 mkdir -p "$KEYSTORE_DIR"
@@ -57,11 +58,9 @@ expected_keystore="8144fe738427be8e69e2a880fcefa170daecbddaad3929f7639d628bb1439
 actual_keystore="$(sha256sum "$KEYSTORE_FILE" | awk '{print $1}')"
 [[ "$actual_keystore" == "$expected_keystore" ]] || fail "reconstructed_keystore_integrity_mismatch"
 
-# Development base: Node + OmniRoute are packaged. Jcode is intentionally absent and is downloaded
-# once during setup as a signed package split from the fixed VibeCoder runtime release.
+# Build the proven base Alpha without Node. First-run setup downloads the signed node_runtime split from the VibeCoder GitHub release and installs it through Android PackageInstaller.
 run_stage android-host-build 600 bash "$ROOT/scripts/build_android_host.sh"
 run_stage android-apk-build 600 bash "$ROOT/scripts/build_android_shell.sh"
-run_stage android-apk-verify 240 bash "$ROOT/scripts/verify_android_diagnostic_apk.sh" "$APK" development_alpha_download_jcode
-run_stage alpha-evidence 120 python3 "$ROOT/scripts/write_alpha_build_evidence.py" \
-  "$APK" "$NODE_EVIDENCE" "$EVIDENCE"
-printf 'Part 34 development Alpha package evidence: %s\n' "$EVIDENCE"
+run_stage android-apk-verify 180 bash "$ROOT/scripts/verify_android_diagnostic_apk.sh" "$APK" alpha
+run_stage alpha-evidence 60 python3 "$ROOT/scripts/write_alpha_build_evidence.py" "$APK" "$JCODE_EVIDENCE" "$EVIDENCE"
+printf 'Part 34 full Alpha package evidence: %s\n' "$EVIDENCE"
