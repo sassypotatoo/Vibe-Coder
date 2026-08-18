@@ -115,13 +115,30 @@ def prune_packages(root: Path, profile: dict) -> list[str]:
     exact = set(profile["forbidden_package_roots"])
     prefixes = tuple(profile["forbidden_package_prefixes"])
     removed: list[str] = []
-    for nm in list(iter_node_modules(root)):
+
+    # Process nested node_modules before their ancestors. A forbidden package can
+    # legitimately contain its own node_modules (for example sharp/node_modules).
+    # If an ancestor package is removed first, a pre-collected nested path becomes
+    # stale and pathlib.iterdir() raises FileNotFoundError. Deepest-first pruning
+    # keeps the traversal deterministic while preserving the fail-closed package
+    # policy. The existence guard is defensive against an already-removed subtree.
+    node_module_roots = sorted(
+        iter_node_modules(root),
+        key=lambda path: len(path.relative_to(root).parts),
+        reverse=True,
+    )
+    for nm in node_module_roots:
+        if not nm.is_dir():
+            continue
         for rel, path in list(package_relatives(nm)):
             if rel in exact or rel.startswith(prefixes):
                 if path.exists() or path.is_symlink():
                     shutil.rmtree(path, ignore_errors=False) if path.is_dir() and not path.is_symlink() else path.unlink()
                     removed.append(path.relative_to(root).as_posix())
-        # Remove now-empty scopes.
+        # Remove now-empty scopes. The parent package may have disappeared while
+        # pruning a deeper forbidden subtree, so re-check before enumerating it.
+        if not nm.is_dir():
+            continue
         for child in list(nm.iterdir()):
             if child.name.startswith("@") and child.is_dir() and not any(child.iterdir()):
                 child.rmdir()

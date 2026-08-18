@@ -23,6 +23,7 @@ def run(cmd, expect=0):
 def fixture(root: Path) -> None:
     for rel in [
         "build", "migrations", "node_modules/sql.js/dist", "node_modules/sharp/build",
+        "node_modules/sharp/node_modules/transitive-helper",
         "node_modules/sqlite-vec-linux-x64", "node_modules/@img/sharp-linux-x64",
         "src/mitm/tproxy/native/build/Release", "assets",
     ]:
@@ -39,6 +40,9 @@ def fixture(root: Path) -> None:
     (root / "assets/inside.txt").write_text("inside\n")
     (root / "assets/inside-link.txt").symlink_to("inside.txt")
     (root / "node_modules/sharp/build/sharp.node").write_bytes(b"\x7fELFjunk")
+    (root / "node_modules/sharp/node_modules/transitive-helper/package.json").write_text(
+        '{"name":"transitive-helper","version":"1.0.0"}\n'
+    )
     (root / "node_modules/sqlite-vec-linux-x64/vec0.so").write_bytes(b"\x7fELFjunk")
     (root / "node_modules/@img/sharp-linux-x64/sharp.node").write_bytes(b"\x7fELFjunk")
     (root / "src/mitm/tproxy/native/build/Release/transparent.node").write_bytes(b"\x7fELFjunk")
@@ -48,6 +52,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="vibecoder-part343-test-") as td:
         base = Path(td)
         src = base / "src"; out = base / "out"; fixture(src)
+        # The fixture intentionally gives forbidden sharp its own node_modules.
+        # This reproduces the stale nested traversal that failed CI run 86951467373.
         run([sys.executable, str(SEAL), str(src), str(out)])
         run([sys.executable, str(VERIFY), str(out)])
         if (out / "node_modules/sharp").exists() or (out / "node_modules/sqlite-vec-linux-x64").exists():
