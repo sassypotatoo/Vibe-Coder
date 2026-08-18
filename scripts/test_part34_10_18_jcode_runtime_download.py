@@ -30,6 +30,18 @@ extract_split=(ROOT/'scripts/extract_jcode_runtime_split.py').read_text()
 verify_split=(ROOT/'scripts/verify_jcode_runtime_split.py').read_text()
 descriptor=json.loads((ROOT/'android/app/src/main/assets/runtime/jcode-runtime-download.json').read_text())
 
+# Development Node is base-packaged now. Old Play Feature Delivery source must stay gone: even
+# unreferenced Java files are compiled by Gradle and would reintroduce missing Play-Core symbols.
+for stale in (
+    ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java',
+    ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeSetupUi.java',
+):
+    if stale.exists(): die('stale_node_play_delivery_source_survived:'+stale.name)
+for java in (ROOT/'android/app/src/main/java').rglob('*.java'):
+    text=java.read_text()
+    if 'com.google.android.play.core' in text or 'SplitInstall' in text or 'SplitCompat' in text:
+        die('stale_play_core_reference_survived:'+str(java.relative_to(ROOT)))
+
 for token in ('dynamicFeatures += setOf(":jcode_runtime")','versionCode = 33','versionName = "0.33.0-dev"','enableSplit = false'):
     need(app_gradle,token,'app_gradle')
 need(settings,'include(":jcode_runtime")','settings')

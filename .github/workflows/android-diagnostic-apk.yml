@@ -266,6 +266,15 @@ jobs:
           gradle-version: "9.5.0"
           cache-provider: basic
 
+      - name: Validate downloadable Jcode development architecture
+        if: steps.jcode-release.outputs.reused != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/validate_checkpoint.py
+          python3 scripts/validate_part34_10.py
+          python3 scripts/test_part34_10_18_jcode_runtime_download.py
+
       - name: Build exact Jcode once when runtime release is missing
         if: steps.jcode-release.outputs.reused != 'true'
         shell: bash
