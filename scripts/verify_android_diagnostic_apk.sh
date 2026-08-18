@@ -7,7 +7,7 @@ SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 BUILD_TOOLS_VERSION="${ANDROID_BUILD_TOOLS:-36.0.0}"
 EXPECTED_CERT_SHA256="9d73bfaeb16e706723bfc417ce43a9ed6b10286835e8a3050a8ddded67506445"
 fail() { printf 'verify_android_diagnostic_apk: %s\n' "$1" >&2; exit 1; }
-[[ "$MODE" == "minimal" || "$MODE" == "jcode" || "$MODE" == "node" || "$MODE" == "omniroute_asset" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" || "$MODE" == "sideload_alpha" ]] || fail "mode_must_be_minimal_jcode_node_omniroute_asset_omniroute_service_omniroute_gateway_omniroute_inference_alpha_or_sideload_alpha"
+[[ "$MODE" == "minimal" || "$MODE" == "jcode" || "$MODE" == "node" || "$MODE" == "omniroute_asset" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" || "$MODE" == "sideload_alpha" || "$MODE" == "development_alpha_download_jcode" ]] || fail "mode_invalid"
 [[ -f "$APK" && -s "$APK" ]] || fail "apk_missing_or_empty:$APK"
 [[ -n "$SDK_ROOT" && -d "$SDK_ROOT" ]] || fail "android_sdk_root_missing"
 ZIPALIGN="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION/zipalign"
@@ -31,8 +31,12 @@ done
 if [[ "$MODE" == "jcode" || "$MODE" == "alpha" || "$MODE" == "sideload_alpha" ]]; then
   printf '%s\n' "${NATIVE_ENTRIES[@]}" | grep -Fxq 'lib/arm64-v8a/libvibecoder_jcode_exec.so' || fail "jcode_native_entry_missing"
 fi
-if [[ "$MODE" == "node" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "sideload_alpha" ]]; then
+if [[ "$MODE" == "node" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "sideload_alpha" || "$MODE" == "development_alpha_download_jcode" ]]; then
   printf '%s\n' "${NATIVE_ENTRIES[@]}" | grep -Fxq 'lib/arm64-v8a/libvibecoder_node_exec.so' || fail "node_native_entry_missing"
+fi
+if [[ "$MODE" == "development_alpha_download_jcode" ]]; then
+  printf '%s\n' "${NATIVE_ENTRIES[@]}" | grep -Fxq 'lib/arm64-v8a/libvibecoder_jcode_exec.so' && fail "jcode_must_not_be_bundled_in_development_base_apk" || true
+  unzip -Z1 "$APK" | grep -Fxq 'assets/runtime/jcode-runtime-download.json' || fail "jcode_runtime_download_descriptor_missing"
 fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -45,7 +49,7 @@ for entry in "${NATIVE_ENTRIES[@]}"; do
       ;;
   esac
 done
-if [[ "$MODE" == "omniroute_asset" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" || "$MODE" == "sideload_alpha" ]]; then
+if [[ "$MODE" == "omniroute_asset" || "$MODE" == "omniroute_service" || "$MODE" == "omniroute_gateway" || "$MODE" == "omniroute_inference" || "$MODE" == "alpha" || "$MODE" == "sideload_alpha" || "$MODE" == "development_alpha_download_jcode" ]]; then
   OMNI_TMP="$TMP/omniroute-bundle"
   mkdir -p "$OMNI_TMP"
   python3 - "$APK" "$OMNI_TMP" <<'PY'

@@ -470,6 +470,7 @@ impl AndroidHostRuntime {
             RuntimePlacement::ApkNativeLibrary
                 | RuntimePlacement::ApkNativeExecutable
                 | RuntimePlacement::PlayFeatureNativeExecutable
+                | RuntimePlacement::PackageSplitNativeExecutable
         ) {
             return Err(host_error("android_host_component_not_native"));
         }
@@ -497,7 +498,9 @@ impl AndroidHostRuntime {
             }
             RuntimeArtifactKind::NativeExecutable => match component.placement {
                 RuntimePlacement::ApkNativeExecutable => self.paths.native_library_dir(),
-                RuntimePlacement::PlayFeatureNativeExecutable => self.paths.packaged_executable_dir(),
+                RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable => {
+                    self.paths.packaged_executable_dir()
+                },
                 _ => return Err(host_error("android_host_native_executable_placement_invalid")),
             },
             _ => return Err(host_error("android_host_component_not_native")),
@@ -702,7 +705,7 @@ fn required_component<'a>(
 
 fn native_executable_relative_path(component: &RuntimeComponentSpec) -> Result<PathBuf> {
     if component.artifact_kind != RuntimeArtifactKind::NativeExecutable
-        || !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::PlayFeatureNativeExecutable)
+        || !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable)
     {
         return Err(host_error("android_host_runtime_tool_not_native_executable"));
     }

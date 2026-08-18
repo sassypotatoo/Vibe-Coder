@@ -94,7 +94,7 @@ on:
       - ".github/workflows/android-diagnostic-apk.yml"
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 concurrency:
@@ -178,6 +178,7 @@ jobs:
           python3 scripts/test_part34_10_aapt_asset_policy.py
           python3 scripts/test_part34_10_16_sideload_alpha.py
           python3 scripts/test_part34_10_compile_repairs.py
+          python3 scripts/test_part34_10_18_jcode_runtime_download.py
 
       - name: Strict Java 17 compile gate
         shell: bash
@@ -199,25 +200,52 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  jcode-android-proof-build:
-    name: Exact Jcode Android cross-compile + APK
+  jcode-runtime-release:
+    name: Ensure downloadable Jcode 0.73.0 runtime split
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
+    env:
+      JCODE_RUNTIME_TAG: vibecoder-jcode-runtime-0.73.0-dev-v33
+      JCODE_RUNTIME_ASSET: vibecoder-jcode-runtime-arm64-v8a.apk
     steps:
       - uses: actions/checkout@v6.0.2
 
+      - name: Reuse fixed signed Jcode runtime release when available
+        id: jcode-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "reused=false" >> "$GITHUB_OUTPUT"
+          DEST="${RUNNER_TEMP}/jcode-runtime-release"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          if gh release download "$JCODE_RUNTIME_TAG" --repo "$GITHUB_REPOSITORY" \
+               --pattern "$JCODE_RUNTIME_ASSET" --dir "$DEST" >/dev/null 2>&1; then
+            python3 scripts/verify_jcode_runtime_split.py "$DEST/$JCODE_RUNTIME_ASSET"
+            echo "reused=true" >> "$GITHUB_OUTPUT"
+            echo "Existing signed Jcode runtime release is ready."
+          else
+            echo "Jcode runtime release missing; it will be built once and published."
+          fi
+
       - uses: actions/setup-java@v5.6.0
+        if: steps.jcode-release.outputs.reused != 'true'
         with:
           distribution: temurin
           java-version: "17"
 
       - uses: android-actions/setup-android@v4.0.1
+        if: steps.jcode-release.outputs.reused != 'true'
         with:
           cmdline-tools-version: "15859902"
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
 
       - name: Install pinned Android packages
+        if: steps.jcode-release.outputs.reused != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -228,45 +256,59 @@ jobs:
             "cmake;${ANDROID_CMAKE_VERSION}"
 
       - uses: dtolnay/rust-toolchain@1.91.0
+        if: steps.jcode-release.outputs.reused != 'true'
         with:
           targets: aarch64-linux-android
 
       - uses: gradle/actions/setup-gradle@v6.2.0
+        if: steps.jcode-release.outputs.reused != 'true'
         with:
           gradle-version: "9.5.0"
           cache-provider: basic
 
-      - name: Fetch and verify exact Jcode source
-        shell: bash
-        run: bash scripts/fetch_jcode_android_source.sh "${RUNNER_TEMP}/jcode-v0.73.0"
-
-      - name: Cross-compile Jcode for Android Bionic
+      - name: Build exact Jcode once when runtime release is missing
+        if: steps.jcode-release.outputs.reused != 'true'
         shell: bash
         run: |
+          set -euo pipefail
+          bash scripts/fetch_jcode_android_source.sh "${RUNNER_TEMP}/jcode-v0.73.0"
           export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
           export VIBECODER_JCODE_TARGET_DIR="${RUNNER_TEMP}/jcode-target"
           bash scripts/build_jcode_android.sh "${RUNNER_TEMP}/jcode-v0.73.0"
+          JCODE="android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_jcode_exec.so"
+          test -s "$JCODE"
+          bash scripts/build_jcode_runtime_release.sh "$JCODE"
 
-      - name: Validate source checkpoint
+      - name: Publish fixed signed Jcode runtime split
+        if: steps.jcode-release.outputs.reused != 'true'
         shell: bash
-        run: python3 scripts/validate_checkpoint.py
-
-      - name: Build and verify APK with packaged Jcode
-        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
-          bash scripts/part31_build_and_verify.sh jcode
+          set -euo pipefail
+          APK="android/app/build/outputs/jcode-runtime/$JCODE_RUNTIME_ASSET"
+          test -s "$APK"
+          python3 scripts/verify_jcode_runtime_split.py "$APK"
+          if ! gh release view "$JCODE_RUNTIME_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$JCODE_RUNTIME_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "VibeCoder Jcode 0.73.0 development runtime" \
+              --notes "Signed ARM64 Jcode runtime split used by VibeCoder development setup." \
+              --prerelease
+          fi
+          gh release upload "$JCODE_RUNTIME_TAG" "$APK#$JCODE_RUNTIME_ASSET" \
+            --repo "$GITHUB_REPOSITORY" --clobber
 
-      - name: Upload Jcode diagnostic APK + evidence
+      - name: Upload Jcode runtime build diagnostics on failure
+        if: failure()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: vibecoder-part31-jcode-diagnostic-apk
+          name: vibecoder-jcode-runtime-release-failure
           path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/vibecoder-part31-build-evidence.json
+            android/app/build/outputs/jcode-runtime/**
             android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_jcode_exec.so
-          if-no-files-found: error
-          retention-days: 7
+          if-no-files-found: warn
+          retention-days: 14
+
   node-android-proof-build:
     name: Exact Node 24.19.0 Android cross-compile
     runs-on: ubuntu-latest
@@ -389,8 +431,9 @@ jobs:
           retention-days: 14
 
   full-alpha-package:
-    name: Development Alpha APK (Jcode + OmniRoute + Node packaged)
-    needs: [jcode-android-proof-build, node-android-proof-build]
+    if: github.event_name != 'pull_request'
+    name: Development Alpha APK (Jcode downloads in setup; Node packaged)
+    needs: [jcode-runtime-release, node-android-proof-build]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -433,28 +476,8 @@ jobs:
 
       - uses: actions/download-artifact@v8.0.1
         with:
-          name: vibecoder-part31-jcode-diagnostic-apk
-          path: ${{ runner.temp }}/jcode-artifact
-
-
-      - uses: actions/download-artifact@v8.0.1
-        with:
           name: vibecoder-node-24.19.0-android-arm64-development
           path: ${{ runner.temp }}/node-artifact
-
-      - name: Stage exact proven Jcode payload
-        shell: bash
-        run: |
-          set -euo pipefail
-          DEST="android/app/build/generated/jniLibs/arm64-v8a"
-          mkdir -p "$DEST" android/app/build/outputs
-          JCODE="$(find "${RUNNER_TEMP}/jcode-artifact" -type f -name libvibecoder_jcode_exec.so -print -quit)"
-          JCODE_EVIDENCE="$(find "${RUNNER_TEMP}/jcode-artifact" -type f -name vibecoder-part31-build-evidence.json -print -quit)"
-          test -n "$JCODE" -a -s "$JCODE"
-          test -n "$JCODE_EVIDENCE" -a -s "$JCODE_EVIDENCE"
-          install -m 0644 "$JCODE" "$DEST/libvibecoder_jcode_exec.so"
-          install -m 0644 "$JCODE_EVIDENCE" android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
-          python3 scripts/verify_android_elf.py "$DEST/libvibecoder_jcode_exec.so" >/dev/null
 
       - name: Stage exact proven Node payload for development APK
         shell: bash
@@ -524,7 +547,6 @@ jobs:
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/vibecoder-part34-alpha-build-evidence.json
-            android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
             android/app/build/outputs/vibecoder-part34-node-cross-build-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-verification-stamp.json

@@ -300,7 +300,7 @@ for token in (
     'vibecoder-node-24.19.0-android-arm64',
     'vibecoder-node-24.19.0-android-arm64-development',
     "if: steps.reuse-node.outputs.reused != 'true'",
-    'needs: [jcode-android-proof-build, node-android-proof-build]',
+    'needs: [jcode-runtime-release, node-android-proof-build]',
     'vibecoder-part34-development-alpha-apk',
 ):
     if token not in workflow:
@@ -310,4 +310,4 @@ print('Part 34.10.11 Android libc + Node timeout regression PASSED')
 
 print('Part 34.10.13 Node clean-host sanitizer regression PASSED')
 print('Part 34.10.14 Node CI throughput/timeout regression PASSED')
-print('Part 34.10.17 development packaged-Node CI regression PASSED')
+print('Part 34.10.18 downloadable-Jcode development CI regression PASSED')

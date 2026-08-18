@@ -56,6 +56,10 @@ pub enum RuntimePlacement {
     /// Native executable delivered by a Google Play on-demand feature split. It remains package
     /// installed code and must never be copied into writable app data for execution.
     PlayFeatureNativeExecutable,
+    /// Native executable delivered as a signed Android package split outside Google Play. The
+    /// package manager installs it into a package-owned executable location; writable app data is
+    /// never used as an execution root.
+    PackageSplitNativeExecutable,
     /// Non-executable bytes shipped with the app and optionally materialized as data.
     ApkAsset,
     /// Writable app-private data. Never valid for native code or a process executable.
@@ -394,17 +398,21 @@ fn validate_component(component: &RuntimeComponentSpec) -> Result<()> {
             }
         }
         RuntimeArtifactKind::NativeExecutable => {
-            if !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::PlayFeatureNativeExecutable)
+            if !matches!(component.placement, RuntimePlacement::ApkNativeExecutable | RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable)
                 || component.relative_path.is_none()
                 || !component.requires_exec_probe
                 || !component.requires_16k_page_compatibility
             {
                 return Err(packaging_error("runtime_native_executable_placement_invalid"));
             }
-            if component.placement == RuntimePlacement::PlayFeatureNativeExecutable {
+            if matches!(component.placement, RuntimePlacement::PlayFeatureNativeExecutable | RuntimePlacement::PackageSplitNativeExecutable) {
                 let module = component.delivery_module.as_deref().unwrap_or("");
                 if module.is_empty() || module.len() > 128 || component.bundled_in_base != Some(false) {
-                    return Err(packaging_error("runtime_play_feature_delivery_invalid"));
+                    return Err(packaging_error(if component.placement == RuntimePlacement::PlayFeatureNativeExecutable {
+                        "runtime_play_feature_delivery_invalid"
+                    } else {
+                        "runtime_package_split_delivery_invalid"
+                    }));
                 }
             }
         }

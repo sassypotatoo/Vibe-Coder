@@ -115,21 +115,21 @@ assert 'options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))' in (ROOT/'
 assert 'platforms/android-36/android.jar' in strict
 assert 'bash scripts/part34_10_strict_java_compile.sh' in workflow
 
-# Development Alpha is directly installable: Jcode + OmniRoute + proven Node are packaged together.
+# Development Alpha packages Node + OmniRoute; Jcode downloads once as a signed package split.
 assert 'node-android-proof-build:' in workflow
 assert 'full-alpha-package:' in workflow
-assert 'needs: [jcode-android-proof-build, node-android-proof-build]' in workflow
-assert 'Development Alpha APK (Jcode + OmniRoute + Node packaged)' in workflow
+assert 'needs: [jcode-runtime-release, node-android-proof-build]' in workflow
+assert 'Development Alpha APK (Jcode downloads in setup; Node packaged)' in workflow
 assert 'vibecoder-part34-development-alpha-apk' in workflow
 assert 'actions/setup-node@v6.4.0' in workflow
 assert 'package-manager-cache: false' in workflow
-assert workflow.count('actions/download-artifact@v8.0.1') >= 2
+assert workflow.count('actions/download-artifact@v8.0.1') >= 1
 assert 'bash scripts/fetch_omniroute_reviewed_archive.sh' in workflow
 assert 'bash scripts/part34_alpha_build_and_verify.sh' in workflow
-for token in ('libvibecoder_jcode_exec.so','libvibecoder_node_exec.so',
+for token in ('libvibecoder_node_exec.so',
               'verify_node_cross_build_evidence.py',
               'build_omniroute_android_bundle.py','stage_omniroute_android_asset.py',
-              'verify_android_diagnostic_apk.sh" "$APK" sideload_alpha','write_alpha_build_evidence.py'):
+              'verify_android_diagnostic_apk.sh" "$APK" development_alpha_download_jcode','write_alpha_build_evidence.py'):
     assert token in alpha_build
 assert 'MODE" == "jcode" || "$MODE" == "alpha"' in apk_verify
 assert 'MODE" == "node" || "$MODE" == "omniroute_service"' in apk_verify
@@ -138,15 +138,15 @@ assert 'REVIEWED_COMMIT="ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f"' in omni_fetc
 assert '1c33cd369119f17cc8343e7373254f7a93623166dc123246119c379ea9a17ad7' in omni_fetch
 assert 'URL="${REPO}/archive/${REVIEWED_COMMIT}.zip"' in omni_fetch
 assert 'comment != commit' in omni_fetch
-assert 'development_alpha_apk_with_packaged_node_no_play_dependency_not_device_execution' in alpha_evidence
-assert "'google_play_required_for_development_apk': False" in alpha_evidence
-assert "'device_execution_proven': False" in alpha_evidence
-assert "'device_service_round_trip_proven': False" in alpha_evidence
-delivery=(ROOT/'android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java').read_text()
-feature=(ROOT/'android/node_runtime/src/main/AndroidManifest.xml').read_text()
-assert 'SplitInstallManagerFactory.create' in delivery
-assert '.addModule(MODULE_NAME)' in delivery
-assert 'bytesDownloaded()' in delivery and 'totalBytesToDownload()' in delivery
-assert 'startConfirmationDialogForResult' in delivery and 'cancelInstall' in delivery
+assert 'development_base_apk_with_node_and_downloadable_signed_jcode_split_not_device_execution' in alpha_evidence
+assert "'signed_package_split_download_during_setup'" in alpha_evidence
+assert "'device_execution_proven':False" in alpha_evidence
+assert "'device_service_round_trip_proven':False" in alpha_evidence
+delivery=(ROOT/'android/app/src/main/java/com/vibecoder/shell/JcodeRuntimeDeliveryManager.java').read_text()
+feature=(ROOT/'android/jcode_runtime/src/main/AndroidManifest.xml').read_text()
+assert 'PackageInstaller.SessionParams.MODE_INHERIT_EXISTING' in delivery
+assert 'canRequestPackageInstalls()' in delivery
+assert 'JcodeRuntimeInstallReceiver' in delivery
+assert 'dist:on-demand' in feature
 assert '<dist:on-demand />' in feature and 'dist:fusing dist:include="false"' in feature
 print('Part 34.10.15 UI/runtime/on-demand-node pre-compile regression PASSED')
