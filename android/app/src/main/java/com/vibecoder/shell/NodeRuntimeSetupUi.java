@@ -109,7 +109,19 @@ final class NodeRuntimeSetupUi {
             case "installing": status.setText("Installing verified Play-delivered runtime…"); break;
             case "cancelling": status.setText("Cancelling setup…"); break;
             case "cancelled": status.setText("Node.js runtime setup cancelled."); break;
-            case "failed": status.setText("Setup failed: " + safe(state.error)); break;
+            case "failed":
+                if ("node_runtime_play_app_not_owned_use_sideload_alpha".equals(state.error)) {
+                    status.setText("This base APK cannot download Node from Google Play.");
+                    progressText.setText("Use the Sideload Alpha APK");
+                    bytesText.setText("The sideload build contains the verified Node.js runtime locally and does not require Play ownership.");
+                    primary.setEnabled(false);
+                } else if ("node_runtime_play_store_unavailable".equals(state.error)) {
+                    status.setText("Google Play is unavailable for Node.js delivery.");
+                    bytesText.setText("Install the Sideload Alpha APK for local testing, or install the Play build through Google Play.");
+                } else {
+                    status.setText("Setup failed: " + safe(state.error));
+                }
+                break;
             default: status.setText("Node.js runtime is required before local AI startup.");
         }
     }

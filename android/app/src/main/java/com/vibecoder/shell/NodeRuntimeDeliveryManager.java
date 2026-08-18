@@ -178,7 +178,7 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
                 break;
             case SplitInstallSessionStatus.FAILED:
                 emitTerminal(new State(
-                        "failed", downloaded, total, "node_runtime_split_error_" + state.errorCode(), null));
+                        "failed", downloaded, total, splitInstallFailureCode(state.errorCode()), null));
                 break;
             default:
                 listener.onNodeRuntimeState(new State("pending", downloaded, total, null, null));
@@ -229,9 +229,19 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
 
     private static String splitInstallFailureCode(Exception error) {
         if (error instanceof SplitInstallException) {
-            return "node_runtime_split_error_" + ((SplitInstallException) error).getErrorCode();
+            return splitInstallFailureCode(((SplitInstallException) error).getErrorCode());
         }
         return "node_runtime_install_request_failed";
+    }
+
+    private static String splitInstallFailureCode(int errorCode) {
+        if (errorCode == -15) {
+            return "node_runtime_play_app_not_owned_use_sideload_alpha";
+        }
+        if (errorCode == -14) {
+            return "node_runtime_play_store_unavailable";
+        }
+        return "node_runtime_split_error_" + errorCode;
     }
 
     private void register() {

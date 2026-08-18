@@ -11,3 +11,7 @@ node_runtime feature module. Do not copy libvibecoder_node_exec.so into the base
 
 The base APK remains buildable without Node and reports Node as setup-required until the feature is
 installed.
+
+Sideload diagnostic exception: a separately proven Node payload may be staged only under
+android/app/build/generated/jniLibs at build time for the explicit sideload Alpha lane.
+Production Play AAB generation removes any base Node payload and keeps node_runtime on demand.

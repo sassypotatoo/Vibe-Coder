@@ -115,11 +115,22 @@ jobs:
           python3 scripts/test_part34_10_ui_tools.py
           python3 scripts/test_part34_10_alpha_package_tools.py
           python3 scripts/test_part34_10_aapt_asset_policy.py
+          python3 scripts/test_part34_10_16_sideload_alpha.py
           python3 scripts/test_part34_10_compile_repairs.py
           bash scripts/part34_10_strict_java_compile.sh
           export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
           bash scripts/part34_play_bundle_build_and_verify.sh \
             "${RUNNER_TEMP}/OmniRoute-release-v3.8.50.zip" "$NODE" "$NODE_EVIDENCE"
+
+      - name: Build verified sideload Alpha APK with packaged Node
+        shell: bash
+        run: |
+          set -euo pipefail
+          NODE="$(find "${RUNNER_TEMP}/node-runtime" -type f -name libvibecoder_node_exec.so -print -quit)"
+          NODE_EVIDENCE="$(find "${RUNNER_TEMP}/node-runtime" -type f -name vibecoder-part34-node-cross-build-evidence.json -print -quit)"
+          test -n "$NODE" -a -s "$NODE"
+          test -n "$NODE_EVIDENCE" -a -s "$NODE_EVIDENCE"
+          bash scripts/part34_sideload_alpha_from_play_build.sh "$NODE" "$NODE_EVIDENCE"
 
       - name: Upload Play build diagnostics on failure
         if: failure()
@@ -133,6 +144,19 @@ jobs:
             android/app/build/outputs/vibecoder-part34-omniroute-asset-staging.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Upload sideload-ready Alpha APK
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: vibecoder-part34-sideload-alpha-apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/vibecoder-part34-sideload-alpha-build-evidence.json
+            android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
+            android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
 
       - name: Upload Play bundle + package evidence
         uses: actions/upload-artifact@v7.0.1

@@ -156,7 +156,7 @@ for token in (
     'actions/download-artifact@v8.0.1',
     'bash scripts/fetch_omniroute_reviewed_archive.sh',
     'bash scripts/part34_alpha_build_and_verify.sh',
-    'vibecoder-part34-full-alpha-apk',
+    'vibecoder-part34-base-alpha-play-node-required',
     'python3 scripts/test_part34_10_alpha_package_tools.py'):
     need(workflow, token, 'base Alpha CI lane with Node on-demand')
 for token in (
@@ -173,6 +173,27 @@ for token in (
     'MODE" == "node" || "$MODE" == "omniroute_service"',
     'MODE" == "omniroute_asset" || "$MODE" == "omniroute_service"'):
     need(apk_verify, token, 'full Alpha APK payload verifier')
+sideload_script=read(Path('scripts/part34_sideload_alpha_from_play_build.sh'))
+sideload_evidence=read(Path('scripts/write_sideload_alpha_build_evidence.py'))
+sideload_regression=read(Path('scripts/test_part34_10_16_sideload_alpha.py'))
+play_workflow=read(Path('.github/workflows/android-play-bundle.yml'))
+for token in (
+    'vibecoder-part34-sideload-alpha-apk',
+    'part34_sideload_alpha_from_play_build.sh',
+    'compression-level: 0'):
+    need(play_workflow, token, 'sideload-ready Alpha CI lane')
+for token in (
+    'verify_android_diagnostic_apk.sh" "$APK" sideload_alpha',
+    'verify_node_cross_build_evidence.py',
+    'write_sideload_alpha_build_evidence.py'):
+    need(sideload_script, token, 'sideload Alpha build contract')
+for token in (
+    "'delivery': 'packaged_in_sideload_base_apk'",
+    "'bundled_in_base_apk': True",
+    "'production_play_delivery_remains_on_demand': True"):
+    need(sideload_evidence, token, 'sideload Alpha evidence contract')
+need(sideload_regression, 'Part 34.10.16 sideload Alpha regression PASSED', 'sideload Alpha regression')
+
 for token in (
     'SOURCE_REF="release/v3.8.50"',
     'REVIEWED_COMMIT="ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f"',

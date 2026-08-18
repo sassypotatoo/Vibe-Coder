@@ -6684,6 +6684,31 @@ def check_part34_aapt_transparency_repair() -> None:
         fail("Part 34 AAPT asset policy is not the transparent sentinel")
 
 
+def check_part34_sideload_alpha_repair() -> None:
+    play = read(".github/workflows/android-play-bundle.yml")
+    diag = read(".github/workflows/android-diagnostic-apk.yml")
+    sideload = read("scripts/part34_sideload_alpha_from_play_build.sh")
+    evidence = read("scripts/write_sideload_alpha_build_evidence.py")
+    apk_verify = read("scripts/verify_android_diagnostic_apk.sh")
+    delivery = read("android/app/src/main/java/com/vibecoder/shell/NodeRuntimeDeliveryManager.java")
+    ui = read("android/app/src/main/java/com/vibecoder/shell/NodeRuntimeSetupUi.java")
+    for token, label, haystack in (
+        ("vibecoder-part34-sideload-alpha-apk", "sideload artifact", play),
+        ("part34_sideload_alpha_from_play_build.sh", "sideload build step", play),
+        ("vibecoder-part34-base-alpha-play-node-required", "unambiguous base artifact", diag),
+        ('verify_android_diagnostic_apk.sh" "$APK" sideload_alpha', "sideload APK verifier", sideload),
+        ("verify_node_feature_bundle.py", "production AAB recheck", sideload),
+        ("'production_play_delivery_remains_on_demand': True", "production delivery evidence", evidence),
+        ("sideload_alpha", "sideload verifier mode", apk_verify),
+        ("node_runtime_play_app_not_owned_use_sideload_alpha", "APP_NOT_OWNED mapping", delivery),
+        ("Use the Sideload Alpha APK", "APP_NOT_OWNED UI", ui),
+    ):
+        if token not in haystack:
+            fail(f"Part 34.10.16 sideload Alpha repair missing {label}: {token}")
+    if "vibecoder-part34-full-alpha-apk" in diag:
+        fail("Part 34.10.16 ambiguous old base Alpha artifact name survived")
+
+
 def check_checksum_manifest() -> None:
     manifest = require("CHECKSUMS.sha256")
     listed: set[str] = set()
@@ -6763,6 +6788,7 @@ def main() -> int:
     check_part31_review_fixes()
     check_project_state_and_docs()
     check_part34_aapt_transparency_repair()
+    check_part34_sideload_alpha_repair()
     check_checksum_manifest()
 
     if ERRORS:

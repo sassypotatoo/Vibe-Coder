@@ -372,10 +372,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload full Alpha APK + package evidence
+      - name: Upload base Alpha APK (Play Node required) + package evidence
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: vibecoder-part34-full-alpha-apk
+          name: vibecoder-part34-base-alpha-play-node-required
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/vibecoder-part34-alpha-build-evidence.json
