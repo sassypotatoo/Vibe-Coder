@@ -156,6 +156,7 @@ jobs:
           python3 scripts/test_part34_3_bundle_tools.py
           python3 scripts/test_part34_3_bundle_output_policy.py
           python3 scripts/test_part34_3_android_stub_compat.py
+          python3 scripts/test_part34_3_minimal_build_pruning.py
           python3 scripts/test_part34_3_live_build_logging.py
           python3 scripts/test_part34_3_asset_tools.py
           python3 scripts/test_part34_3_service_tools.py
@@ -338,6 +339,7 @@ jobs:
           python3 scripts/test_part34_3_bundle_tools.py
           python3 scripts/test_part34_3_bundle_output_policy.py
           python3 scripts/test_part34_3_android_stub_compat.py
+          python3 scripts/test_part34_3_minimal_build_pruning.py
           python3 scripts/test_part34_3_live_build_logging.py
           python3 scripts/test_part34_3_asset_tools.py
           python3 scripts/test_part34_3_service_tools.py
@@ -362,6 +364,8 @@ jobs:
           path: |
             android/app/build/outputs/vibecoder-part34-omniroute-build.log
             android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
+            android/app/build/outputs/vibecoder-part34-omniroute-verification-stamp.json
+            android/app/build/outputs/vibecoder-part34-omniroute-asset-staging.json
           if-no-files-found: warn
           retention-days: 7
 
@@ -374,7 +378,8 @@ jobs:
             android/app/build/outputs/vibecoder-part34-alpha-build-evidence.json
             android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json
             android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json
-            android/app/build/outputs/vibecoder-part34-omniroute-build.log
+            android/app/build/outputs/vibecoder-part34-omniroute-verification-stamp.json
             android/app/build/outputs/vibecoder-part34-omniroute-asset-staging.json
+            android/app/build/outputs/vibecoder-part34-omniroute-build.log
           if-no-files-found: error
           retention-days: 7

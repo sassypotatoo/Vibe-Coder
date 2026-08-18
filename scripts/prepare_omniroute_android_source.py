@@ -24,6 +24,8 @@ PATCH_META = ROOT / "third_party" / "patches" / "omniroute-3.8.50-vibecoder-dete
 PATCHER = ROOT / "scripts" / "apply_omniroute_runtime_patches.py"
 STUB_COMPAT_META = ROOT / "third_party" / "patches" / "omniroute-3.8.50-android-stub-compat.json"
 STUB_COMPAT = ROOT / "scripts" / "apply_omniroute_android_stub_compat.py"
+MINIMAL_PRUNING_META = ROOT / "third_party" / "patches" / "omniroute-3.8.50-android-minimal-build-pruning.json"
+MINIMAL_PRUNING = ROOT / "scripts" / "apply_omniroute_android_minimal_build_pruning.py"
 
 MAX_ARCHIVE_BYTES = 80 * 1024 * 1024
 MAX_ENTRIES = 20_000
@@ -209,6 +211,31 @@ def apply_and_verify_android_stub_compat(source: Path) -> None:
             )
 
 
+def apply_and_verify_android_minimal_pruning(source: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(MINIMAL_PRUNING), str(source)],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if result.returncode != 0:
+        sys.stderr.write(result.stdout)
+        raise SystemExit(f"omniroute_android_minimal_pruning_apply_failed:{result.returncode}")
+    meta = json.loads(MINIMAL_PRUNING_META.read_text(encoding="utf-8"))
+    target = source / meta["target_path"]
+    if not target.is_file():
+        raise SystemExit("omniroute_android_minimal_pruning_target_missing_after_patch")
+    text = target.read_text(encoding="utf-8")
+    marker = meta.get("patch_marker")
+    if not isinstance(marker, str) or marker not in text:
+        raise SystemExit("omniroute_android_minimal_pruning_marker_missing_after_patch")
+    for route in meta.get("disabled_routes", []):
+        if f'"{route}"' not in text:
+            raise SystemExit(f"omniroute_android_minimal_pruning_route_missing_after_patch:{route}")
+
+
 def write_evidence(archive: Path, source: Path, output: Path, provenance: dict, archive_sha256: str, archive_size: int) -> None:
     patch_meta = json.loads(PATCH_META.read_text(encoding="utf-8"))
     stub_compat_meta = json.loads(STUB_COMPAT_META.read_text(encoding="utf-8"))
@@ -239,6 +266,12 @@ def write_evidence(archive: Path, source: Path, output: Path, provenance: dict, 
             }
             for entry in stub_compat_meta["files"]
         ],
+        "android_minimal_build_pruning": {
+            "target_path": json.loads(MINIMAL_PRUNING_META.read_text(encoding="utf-8"))["target_path"],
+            "patch_marker": json.loads(MINIMAL_PRUNING_META.read_text(encoding="utf-8"))["patch_marker"],
+            "disabled_route_count": json.loads(MINIMAL_PRUNING_META.read_text(encoding="utf-8"))["disabled_route_count"],
+            "protected_gateway_routes": json.loads(MINIMAL_PRUNING_META.read_text(encoding="utf-8"))["protected_gateway_routes"],
+        },
         "runtime_bundle_built": False,
         "android_native_dependency_resolution_proven": False,
         "apk_asset_packaged": False,
@@ -261,6 +294,7 @@ def main() -> int:
     verify_source_metadata(source, provenance)
     apply_and_verify_patch(source, provenance)
     apply_and_verify_android_stub_compat(source)
+    apply_and_verify_android_minimal_pruning(source)
     evidence = args.evidence or (output_dir / "VIBECODER_OMNIROUTE_SOURCE_EVIDENCE.json")
     write_evidence(args.archive, source, evidence, provenance, archive_sha256, archive_size)
     print(f"OmniRoute reviewed source prepared: {source}")

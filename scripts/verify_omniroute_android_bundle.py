@@ -73,6 +73,7 @@ def tree_digest(files: list[dict]) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("bundle_root", type=Path)
+    ap.add_argument("--write-verification-stamp", type=Path)
     args = ap.parse_args()
     root = args.bundle_root.resolve()
     if not root.is_dir() or root.is_symlink():
@@ -128,6 +129,31 @@ def main() -> int:
     for req in PROFILE["required_paths"]:
         if not root.joinpath(*PurePosixPath(req).parts).exists():
             raise SystemExit(f"omniroute_android_bundle_required_path_missing:{req}")
+
+    if args.write_verification_stamp is not None:
+        stamp_path = args.write_verification_stamp.expanduser().resolve(strict=False)
+        if stamp_path == root or root in stamp_path.parents:
+            raise SystemExit("omniroute_android_verification_stamp_inside_bundle_forbidden")
+        if stamp_path.exists() and stamp_path.is_symlink():
+            raise SystemExit("omniroute_android_verification_stamp_symlink_forbidden")
+        stamp = {
+            "schema": 1,
+            "component_id": "omniroute",
+            "version": "3.8.50",
+            "profile_id": PROFILE["profile_id"],
+            "bundle_root": str(root),
+            "manifest_sha256": sha(mp),
+            "tree_sha256": manifest["tree_sha256"],
+            "file_count": manifest["file_count"],
+            "total_bytes": manifest["total_bytes"],
+            "independent_full_tree_verification": True,
+        }
+        stamp_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_stamp = stamp_path.with_name(stamp_path.name + ".tmp")
+        temp_stamp.write_text(json.dumps(stamp, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(temp_stamp, stamp_path)
+        print(f"verification_stamp={stamp_path}")
+
     print("OmniRoute Android runtime bundle verification PASSED")
     print(f"files={len(actual)} tree_sha256={manifest['tree_sha256']}")
     return 0

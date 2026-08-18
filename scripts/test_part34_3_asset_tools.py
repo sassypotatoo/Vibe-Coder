@@ -76,6 +76,51 @@ def main() -> int:
         if stale.exists():
             raise AssertionError("stale staged asset survived atomic replacement")
 
+        # CI fast path: one independent full verification writes a manifest-bound stamp,
+        # then staging atomically consumes the verified bundle instead of copy+verify+rehash.
+        fast_standalone = tmp / "fast-standalone"
+        fast_sealed = tmp / "fast-sealed"
+        fast_assets = tmp / "fast-assets"
+        fast_stamp = tmp / "fast-verification-stamp.json"
+        fast_evidence = tmp / "fast-evidence.json"
+        fast_standalone.mkdir()
+        make_standalone(fast_standalone)
+        run(sys.executable, str(SEAL), str(fast_standalone), str(fast_sealed), "--allowed-symlink-root", str(fast_standalone))
+        run(sys.executable, str(VERIFY), str(fast_sealed), "--write-verification-stamp", str(fast_stamp))
+        run(
+            sys.executable, str(STAGE), str(fast_sealed),
+            "--assets-root", str(fast_assets),
+            "--evidence", str(fast_evidence),
+            "--verification-stamp", str(fast_stamp),
+            "--consume-verified-bundle",
+        )
+        fast_staged = fast_assets / "omniroute" / "bundle"
+        if fast_sealed.exists():
+            raise AssertionError("fast-path source bundle was copied instead of atomically consumed")
+        run(sys.executable, str(VERIFY), str(fast_staged))
+        fast_info = json.loads(fast_evidence.read_text())
+        if fast_info.get("consumed_independently_verified_bundle") is not True:
+            raise AssertionError("fast-path evidence missing independently verified consume marker")
+        if not isinstance(fast_info.get("verification_stamp_sha256"), str):
+            raise AssertionError("fast-path evidence missing verification stamp digest")
+
+        # A stamp for a different manifest must fail before consuming the directory.
+        mismatch_standalone = tmp / "mismatch-standalone"
+        mismatch_sealed = tmp / "mismatch-sealed"
+        mismatch_standalone.mkdir()
+        make_standalone(mismatch_standalone)
+        run(sys.executable, str(SEAL), str(mismatch_standalone), str(mismatch_sealed), "--allowed-symlink-root", str(mismatch_standalone))
+        mismatch = run(
+            sys.executable, str(STAGE), str(mismatch_sealed),
+            "--assets-root", str(tmp / "mismatch-assets"),
+            "--evidence", str(tmp / "mismatch-evidence.json"),
+            "--verification-stamp", str(fast_stamp),
+            "--consume-verified-bundle",
+            ok=False,
+        )
+        if "omniroute_asset_stage_verification_stamp_mismatch" not in mismatch.stdout:
+            raise AssertionError("fast-path accepted a stamp bound to a different bundle")
+
         # Producer must refuse to write generated content into tracked Android source assets.
         bad = run(
             sys.executable,

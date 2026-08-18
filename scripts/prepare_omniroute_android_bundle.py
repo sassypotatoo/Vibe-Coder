@@ -7,6 +7,7 @@ supported desktop CI host, but desktop native addons MUST NOT cross the Android 
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -14,6 +15,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import time
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,25 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def clone_or_copy_file(src: str, dst: str, *, follow_symlinks: bool = True) -> str:
+    source = Path(src)
+    # copytree(symlinks=False) promises materialized symlinks. Preserve that contract
+    # instead of hard-linking the symlink inode itself.
+    if source.is_symlink():
+        return shutil.copy2(src, dst, follow_symlinks=True)
+    try:
+        os.link(src, dst, follow_symlinks=follow_symlinks)
+        return dst
+    except OSError as exc:
+        if exc.errno not in {errno.EXDEV, errno.EPERM, errno.EACCES, errno.EMLINK, errno.EINVAL}:
+            raise
+        return shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+
+
+def phase_done(label: str, started: float) -> None:
+    print(f"[omniroute-seal] DONE {label} elapsed={time.monotonic() - started:.1f}s", flush=True)
 
 
 def load_profile() -> dict:
@@ -255,19 +276,32 @@ def main() -> int:
     if not source.is_dir() or source.is_symlink():
         raise SystemExit("omniroute_standalone_root_invalid")
     profile = load_profile()
+    started = time.monotonic()
+    print("[omniroute-seal] START source-symlink-validation", flush=True)
     validate_source_symlinks(source, args.allowed_symlink_root)
+    phase_done("source-symlink-validation", started)
     output = safe_output(args.output_root, source)
     output.parent.mkdir(parents=True, exist_ok=True)
 
     temp = Path(tempfile.mkdtemp(prefix=f".{output.name}.tmp-", dir=output.parent))
     try:
         shutil.rmtree(temp)
-        # Dereference symlinks while copying. Dangling symlinks fail the copy rather than
-        # becoming build-machine references in an Android asset.
-        shutil.copytree(source, temp, symlinks=False)
+        # Dereference symlinks while cloning. On the common same-filesystem CI path,
+        # hard links avoid copying immutable build bytes. Cross-device/unsupported files
+        # fall back to copy2 without weakening the standalone isolation boundary.
+        started = time.monotonic()
+        print("[omniroute-seal] START tree-clone", flush=True)
+        shutil.copytree(source, temp, symlinks=False, copy_function=clone_or_copy_file)
+        phase_done("tree-clone", started)
+        started = time.monotonic()
+        print("[omniroute-seal] START forbidden-prune", flush=True)
         removed_packages = prune_packages(temp, profile)
         removed_roots = prune_relative_roots(temp, profile)
+        phase_done("forbidden-prune", started)
+        started = time.monotonic()
+        print("[omniroute-seal] START full-tree-hash", flush=True)
         files, total_bytes = validate_tree(temp, profile)
+        phase_done("full-tree-hash", started)
         manifest = {
             "schema": 1,
             "component_id": "omniroute",

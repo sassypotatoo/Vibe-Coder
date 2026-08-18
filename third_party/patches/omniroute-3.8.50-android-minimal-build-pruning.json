@@ -1,0 +1,39 @@
+{
+  "disabled_route_count": 21,
+  "disabled_routes": [
+    "api/openapi/spec/route.ts",
+    "api/cli-tools/codewhale-settings/route.ts",
+    "api/cli-tools/crush-settings/route.ts",
+    "api/cli-tools/jcode-settings/route.ts",
+    "api/cli-tools/pi-settings/route.ts",
+    "api/cli-tools/smelt-settings/route.ts",
+    "api/cli-tools/grok-build-settings/route.ts",
+    "api/cli-tools/deepseek-tui-settings/route.ts",
+    "api/cli-tools/forge-settings/route.ts",
+    "api/cli-tools/guide-settings/[toolId]/route.ts",
+    "api/tools/agent-bridge/agents/[id]/route.ts",
+    "api/tools/agent-bridge/server/route.ts",
+    "api/tools/agent-bridge/tproxy/route.ts",
+    "api/tunnels/tailscale/start-daemon/route.ts",
+    "api/tunnels/cloudflared/route.ts",
+    "api/settings/mitm/route.ts",
+    "api/db-backups/exportAll/route.ts",
+    "api/db-backups/import/route.ts",
+    "api/oauth/kiro/auto-import/route.ts",
+    "api/oauth/raycast/auto-import/route.ts",
+    "api/providers/agy-auth/apply-local/route.ts"
+  ],
+  "patch_marker": "omniroute:vibecoder-android-minimal-route-stub",
+  "protected_gateway_routes": [
+    "/v1/models",
+    "/v1/chat/completions",
+    "/v1/vibecoder/runtime-profile"
+  ],
+  "purpose": "Stub desktop-only API routes in VibeCoder Android minimal builds before Turbopack filesystem tracing.",
+  "required_upstream_git_blob_sha1": "9719e8918ec1d88cb9a9829cb3a61c51fc2ea59d",
+  "reviewed_git_commit": "ab8f3e83b7564c8dca4497cb0e736ceb75d8a40f",
+  "schema": 1,
+  "target_path": "scripts/build/backendOnlyPages.mjs",
+  "upstream": "OmniRoute",
+  "upstream_version": "3.8.50"
+}

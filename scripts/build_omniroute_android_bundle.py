@@ -156,6 +156,11 @@ def main() -> int:
         if args.evidence
         else work / "build.log"
     )
+    verification_stamp = (
+        args.evidence.parent / "vibecoder-part34-omniroute-verification-stamp.json"
+        if args.evidence
+        else work / "verification-stamp.json"
+    )
     try:
         run([sys.executable, str(PREP), str(args.reviewed_archive), str(prepared), "--evidence", str(admission_evidence)], log=build_log)
         evidence["source_admitted"] = True
@@ -181,8 +186,16 @@ def main() -> int:
         standalone = source / ".build" / "next" / "standalone"
         run([sys.executable, str(SEAL), str(standalone), str(args.output_bundle), "--allowed-symlink-root", str(source)], log=build_log)
         evidence["android_bundle_sealed"] = True
-        run([sys.executable, str(VERIFY), str(args.output_bundle)], log=build_log)
+        run(
+            [
+                sys.executable, str(VERIFY), str(args.output_bundle),
+                "--write-verification-stamp", str(verification_stamp),
+            ],
+            log=build_log,
+        )
         evidence["android_bundle_verified"] = True
+        evidence["verification_stamp_path"] = str(verification_stamp)
+        evidence["verification_stamp_written"] = verification_stamp.is_file()
         manifest = json.loads((args.output_bundle / ".vibecoder-omniroute-bundle.json").read_text())
         evidence["bundle_tree_sha256"] = manifest["tree_sha256"]
         evidence["bundle_file_count"] = manifest["file_count"]

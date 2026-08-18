@@ -9,9 +9,27 @@ JCODE_EVIDENCE="$ROOT/android/app/build/outputs/vibecoder-part34-jcode-build-evi
 BASE_NODE="$ROOT/android/app/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so"
 FEATURE_NODE="$ROOT/android/node_runtime/build/generated/jniLibs/arm64-v8a/libvibecoder_node_exec.so"
 BUNDLE_DIR="$ROOT/android/app/build/generated/omnirouteBundle"
+OMNIROUTE_VERIFY_STAMP="$ROOT/android/app/build/outputs/vibecoder-part34-omniroute-verification-stamp.json"
 AAB="$ROOT/android/app/build/outputs/bundle/debug/app-debug.aab"
 EVIDENCE="$ROOT/android/app/build/outputs/vibecoder-part34-play-bundle-evidence.json"
 fail() { printf 'part34_play_bundle_build_and_verify: %s\n' "$1" >&2; exit 1; }
+run_stage() {
+  local label="$1" limit="$2"; shift 2
+  local started rc elapsed
+  started="$(date +%s)"
+  printf '[part34-stage] START %s timeout=%ss\n' "$label" "$limit"
+  set +e
+  timeout --signal=TERM --kill-after=30s "${limit}s" "$@"
+  rc=$?
+  set -e
+  elapsed=$(( $(date +%s) - started ))
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+    fail "stage_timeout:${label}:${limit}s"
+  fi
+  [[ "$rc" -eq 0 ]] || fail "stage_failed:${label}:rc=${rc}"
+  printf '[part34-stage] DONE %s elapsed=%ss\n' "$label" "$elapsed"
+}
+
 
 [[ -n "$ARCHIVE" && -f "$ARCHIVE" && -s "$ARCHIVE" ]] || fail "reviewed_omniroute_archive_missing"
 [[ -n "$NODE" && -f "$NODE" && -s "$NODE" ]] || fail "node_runtime_binary_missing"
@@ -33,10 +51,12 @@ node_version="$(node --version 2>/dev/null || true)"
 command -v npm >/dev/null 2>&1 || fail "npm_not_found"
 
 rm -rf "$BUNDLE_DIR" "$ROOT/android/app/build/generated/omnirouteAssets"
-python3 "$ROOT/scripts/build_omniroute_android_bundle.py" \
+run_stage omniroute-build-and-verify 1200 python3 "$ROOT/scripts/build_omniroute_android_bundle.py" \
   "$ARCHIVE" "$BUNDLE_DIR" \
   --evidence "$ROOT/android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json"
-python3 "$ROOT/scripts/stage_omniroute_android_asset.py" "$BUNDLE_DIR"
+run_stage omniroute-asset-stage 120 python3 "$ROOT/scripts/stage_omniroute_android_asset.py" "$BUNDLE_DIR" \
+  --verification-stamp "$OMNIROUTE_VERIFY_STAMP" \
+  --consume-verified-bundle
 
 KEYSTORE_DIR="$ROOT/android/signing"
 KEYSTORE_FILE="$KEYSTORE_DIR/vibecoder-diagnostic-debug.jks"
@@ -47,7 +67,7 @@ actual_keystore="$(sha256sum "$KEYSTORE_FILE" | awk '{print $1}')"
 [[ "$actual_keystore" == "$expected_keystore" ]] || fail "reconstructed_keystore_integrity_mismatch"
 
 export ANDROID_NDK_ROOT="${ANDROID_NDK_ROOT:-${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}/ndk/28.2.13676358}"
-bash "$ROOT/scripts/build_android_host.sh"
+run_stage android-host-build 600 bash "$ROOT/scripts/build_android_host.sh"
 
 SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 [[ -n "$SDK_ROOT" && -d "$SDK_ROOT" ]] || fail "android_sdk_root_missing"
@@ -61,8 +81,8 @@ else
 fi
 GRADLE_INFO="$("${GRADLE[@]}" --version)"
 printf '%s\n' "$GRADLE_INFO" | grep -Eq '^Gradle 9\.5\.0$' || fail "gradle_version_must_be_9_5_0"
-"${GRADLE[@]}" --no-daemon --stacktrace :app:bundleDebug
+run_stage play-aab-build 900 "${GRADLE[@]}" --no-daemon --stacktrace :app:bundleDebug
 [[ -f "$AAB" && -s "$AAB" ]] || fail "debug_aab_missing_after_successful_gradle_task"
-python3 "$ROOT/scripts/verify_node_feature_bundle.py" "$AAB" "$FEATURE_NODE" >/dev/null
-python3 "$ROOT/scripts/write_play_bundle_evidence.py" "$AAB" "$FEATURE_NODE" "$NODE_EVIDENCE" "$EVIDENCE"
+run_stage play-aab-verify 180 python3 "$ROOT/scripts/verify_node_feature_bundle.py" "$AAB" "$FEATURE_NODE"
+run_stage play-evidence 60 python3 "$ROOT/scripts/write_play_bundle_evidence.py" "$AAB" "$FEATURE_NODE" "$NODE_EVIDENCE" "$EVIDENCE"
 printf 'Part 34 Play bundle package evidence: %s\n' "$EVIDENCE"

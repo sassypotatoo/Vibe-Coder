@@ -131,6 +131,10 @@ def main() -> int:
         "feature_degradations",
         "apk_asset_packaged\": False",
         "service_round_trip_proven\": False",
+        "clone_or_copy_file",
+        "os.link",
+        "[omniroute-seal] START tree-clone",
+        "[omniroute-seal] START full-tree-hash",
     ):
         require(sealer, token, "OmniRoute Android bundle sealer")
 
@@ -141,8 +145,20 @@ def main() -> int:
         "omniroute_android_bundle_manifest_overclaims_runtime_proof",
         "is_forbidden_package_identity",
         "OmniRoute Android runtime bundle verification PASSED",
+        "--write-verification-stamp",
+        "independent_full_tree_verification",
+        "omniroute_android_verification_stamp_inside_bundle_forbidden",
     ):
         require(verifier, token, "OmniRoute Android bundle verifier")
+
+    prepared_source = read("scripts/prepare_omniroute_android_source.py")
+    for token in (
+        "apply_omniroute_android_minimal_build_pruning.py",
+        "omniroute-3.8.50-android-minimal-build-pruning.json",
+        "apply_and_verify_android_minimal_pruning",
+        "android_minimal_build_pruning",
+    ):
+        require(prepared_source, token, "OmniRoute Android prepared-source minimal pruning")
 
     stub_compat = read("scripts/apply_omniroute_android_stub_compat.py")
     for token in (
@@ -153,6 +169,30 @@ def main() -> int:
         "src/mitm/cert/install.stub.ts",
     ):
         require(stub_compat, token, "OmniRoute Android minimal-stub compatibility")
+
+    minimal_pruning = read("scripts/apply_omniroute_android_minimal_build_pruning.py")
+    for token in (
+        "9719e8918ec1d88cb9a9829cb3a61c51fc2ea59d",
+        "OMNIROUTE_BUILD_PROFILE",
+        "api/cli-tools/codewhale-settings/route.ts",
+        "api/tools/agent-bridge/agents/[id]/route.ts",
+        "api/db-backups/exportAll/route.ts",
+        "omniroute_android_minimal_pruning_input_blob_mismatch",
+    ):
+        require(minimal_pruning, token, "OmniRoute Android minimal-build route pruning")
+    minimal_pruning_meta = read("third_party/patches/omniroute-3.8.50-android-minimal-build-pruning.json")
+    for token in (
+        '"/v1/models"', '"/v1/chat/completions"', '"/v1/vibecoder/runtime-profile"',
+        '"disabled_route_count"',
+    ):
+        require(minimal_pruning_meta, token, "OmniRoute Android minimal-build pruning metadata")
+    minimal_pruning_regression = read("scripts/test_part34_3_minimal_build_pruning.py")
+    for token in (
+        "Part 34.3 Android minimal-build route-pruning regression PASSED",
+        "protected gateway route was disabled",
+        "node", "--check",
+    ):
+        require(minimal_pruning_regression, token, "OmniRoute Android minimal-build pruning regression")
 
     stub_compat_regression = read("scripts/test_part34_3_android_stub_compat.py")
     for token in (
@@ -216,6 +256,8 @@ def main() -> int:
         "[omniroute-build] START",
         "still running after",
         "vibecoder-part34-omniroute-build.log",
+        "vibecoder-part34-omniroute-verification-stamp.json",
+        "--write-verification-stamp",
     ):
         require(builder, token, "OmniRoute Android bundle builder")
 
@@ -228,8 +270,23 @@ def main() -> int:
         "apk_asset_packaging_proven",
         "device_extraction_proven",
         "ASSET_RELATIVE_ROOT",
+        "--consume-verified-bundle",
+        "--verification-stamp",
+        "atomic-consume-independently-verified-bundle",
+        "omniroute_asset_stage_verification_stamp_mismatch",
     ):
         require(stager, token, "OmniRoute APK asset stager")
+
+    for build_script_name in ("scripts/part34_alpha_build_and_verify.sh", "scripts/part34_play_bundle_build_and_verify.sh"):
+        build_script = read(build_script_name)
+        for token in (
+            "run_stage()",
+            "timeout --signal=TERM --kill-after=30s",
+            "stage_timeout:${label}:${limit}s",
+            "omniroute-build-and-verify 1200",
+            "omniroute-asset-stage 120",
+        ):
+            require(build_script, token, f"bounded Part 34 build stages: {build_script_name}")
 
     installer = read("android/app/src/main/java/com/vibecoder/shell/OmniRouteAssetInstaller.java")
     for token in (
@@ -253,6 +310,8 @@ def main() -> int:
         "Part 34.3.3 asset-tool regression PASSED",
         "omniroute_asset_stage_tracked_source_output_forbidden",
         "stale staged asset survived atomic replacement",
+        "fast-path source bundle was copied instead of atomically consumed",
+        "consumed_independently_verified_bundle",
     ):
         require(asset_regression, token, "OmniRoute asset regression")
 

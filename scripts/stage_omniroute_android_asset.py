@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Stage a sealed OmniRoute runtime bundle as a generated Android APK asset.
 
-This step proves only deterministic asset staging. It does not claim that an APK containing the
-asset has been built, installed, extracted, or executed on a device.
+Normal mode independently verifies and copies the bundle. CI fast-path mode consumes a bundle that
+was independently verified immediately beforehand by verify_omniroute_android_bundle.py. The
+verification stamp is bound to the exact manifest and bundle path, then the directory is atomically
+moved on the same filesystem. This removes two redundant full-tree hash passes plus one full copy
+without weakening the producer/verifier separation.
 """
 from __future__ import annotations
 
@@ -49,7 +52,6 @@ def safe_assets_root(requested: Path, bundle_root: Path) -> Path:
         raise SystemExit("omniroute_asset_stage_output_root_forbidden")
     if resolved == source or is_within(resolved, source) or is_within(source, resolved):
         raise SystemExit("omniroute_asset_stage_output_conflicts_with_bundle")
-    # Never let this generated-output tool replace tracked Android source assets or source code.
     tracked_android = (ROOT / "android" / "app" / "src").resolve()
     if resolved == tracked_android or is_within(resolved, tracked_android):
         raise SystemExit("omniroute_asset_stage_tracked_source_output_forbidden")
@@ -67,6 +69,31 @@ def verify_bundle(path: Path) -> None:
     if result.returncode != 0:
         sys.stderr.write(result.stdout)
         raise SystemExit("omniroute_asset_stage_bundle_verification_failed")
+
+
+def load_verified_stamp(bundle: Path, manifest: dict, stamp_path: Path) -> dict:
+    if not stamp_path.is_file() or stamp_path.is_symlink():
+        raise SystemExit("omniroute_asset_stage_verification_stamp_invalid")
+    try:
+        stamp = json.loads(stamp_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise SystemExit("omniroute_asset_stage_verification_stamp_invalid")
+    expected = {
+        "schema": 1,
+        "component_id": "omniroute",
+        "version": "3.8.50",
+        "profile_id": manifest.get("profile_id"),
+        "bundle_root": str(bundle.resolve()),
+        "manifest_sha256": sha256_file(bundle / MANIFEST_NAME),
+        "tree_sha256": manifest.get("tree_sha256"),
+        "file_count": manifest.get("file_count"),
+        "total_bytes": manifest.get("total_bytes"),
+        "independent_full_tree_verification": True,
+    }
+    for key, value in expected.items():
+        if stamp.get(key) != value:
+            raise SystemExit(f"omniroute_asset_stage_verification_stamp_mismatch:{key}")
+    return stamp
 
 
 def copy_tree_verified(source: Path, destination: Path) -> None:
@@ -100,17 +127,29 @@ def main() -> int:
     parser.add_argument("bundle_root", type=Path)
     parser.add_argument("--assets-root", type=Path, default=DEFAULT_ASSETS_ROOT)
     parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+    parser.add_argument("--verification-stamp", type=Path)
+    parser.add_argument("--consume-verified-bundle", action="store_true")
     args = parser.parse_args()
+
+    if args.consume_verified_bundle != (args.verification_stamp is not None):
+        raise SystemExit("omniroute_asset_stage_fast_path_arguments_incomplete")
 
     bundle = args.bundle_root.resolve()
     if not bundle.is_dir() or bundle.is_symlink():
         raise SystemExit("omniroute_asset_stage_bundle_invalid")
-    verify_bundle(bundle)
 
     manifest_path = bundle / MANIFEST_NAME
+    if not manifest_path.is_file():
+        raise SystemExit("omniroute_asset_stage_bundle_manifest_missing")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("apk_asset_packaged") is not False or manifest.get("service_round_trip_proven") is not False:
         raise SystemExit("omniroute_asset_stage_input_manifest_overclaims_proof")
+
+    verification_stamp = None
+    if args.consume_verified_bundle:
+        verification_stamp = load_verified_stamp(bundle, manifest, args.verification_stamp.resolve())
+    else:
+        verify_bundle(bundle)
 
     assets_root = safe_assets_root(args.assets_root, bundle)
     target = assets_root / ASSET_RELATIVE_ROOT
@@ -120,14 +159,21 @@ def main() -> int:
 
     temp_parent = target.parent
     temp_parent.mkdir(parents=True, exist_ok=True)
-    stage = Path(tempfile.mkdtemp(prefix=".bundle.stage-", dir=temp_parent))
-    try:
-        shutil.rmtree(stage)
-        copy_tree_verified(bundle, stage)
-        atomic_replace_directory(stage, target)
-    finally:
-        if stage.exists():
-            shutil.rmtree(stage, ignore_errors=True)
+    consumed_verified_bundle = False
+    if args.consume_verified_bundle:
+        if bundle.stat().st_dev != temp_parent.stat().st_dev:
+            raise SystemExit("omniroute_asset_stage_consume_cross_device")
+        atomic_replace_directory(bundle, target)
+        consumed_verified_bundle = True
+    else:
+        stage = Path(tempfile.mkdtemp(prefix=".bundle.stage-", dir=temp_parent))
+        try:
+            shutil.rmtree(stage)
+            copy_tree_verified(bundle, stage)
+            atomic_replace_directory(stage, target)
+        finally:
+            if stage.exists():
+                shutil.rmtree(stage, ignore_errors=True)
 
     staged_manifest = target / MANIFEST_NAME
     evidence = {
@@ -146,6 +192,10 @@ def main() -> int:
         "apk_asset_packaging_proven": False,
         "device_extraction_proven": False,
         "service_round_trip_proven": False,
+        "consumed_independently_verified_bundle": consumed_verified_bundle,
+        "verification_stamp_sha256": (
+            sha256_file(args.verification_stamp.resolve()) if verification_stamp is not None else None
+        ),
     }
     evidence_path = args.evidence.resolve(strict=False)
     if evidence_path.exists() and evidence_path.is_symlink():
@@ -158,6 +208,8 @@ def main() -> int:
     print("OmniRoute Android APK asset staging PASSED")
     print(f"asset={target}")
     print(f"tree_sha256={manifest['tree_sha256']}")
+    if consumed_verified_bundle:
+        print("asset_stage_mode=atomic-consume-independently-verified-bundle")
     return 0
 
 

@@ -6,9 +6,27 @@ GENERATED_JNI="$ROOT/android/app/build/generated/jniLibs/arm64-v8a"
 JCODE="$GENERATED_JNI/libvibecoder_jcode_exec.so"
 JCODE_EVIDENCE="$ROOT/android/app/build/outputs/vibecoder-part34-jcode-build-evidence.json"
 BUNDLE="$ROOT/android/app/build/generated/omnirouteBundle"
+OMNIROUTE_VERIFY_STAMP="$ROOT/android/app/build/outputs/vibecoder-part34-omniroute-verification-stamp.json"
 APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 EVIDENCE="$ROOT/android/app/build/outputs/vibecoder-part34-alpha-build-evidence.json"
 fail() { printf 'part34_alpha_build_and_verify: %s\n' "$1" >&2; exit 1; }
+run_stage() {
+  local label="$1" limit="$2"; shift 2
+  local started rc elapsed
+  started="$(date +%s)"
+  printf '[part34-stage] START %s timeout=%ss\n' "$label" "$limit"
+  set +e
+  timeout --signal=TERM --kill-after=30s "${limit}s" "$@"
+  rc=$?
+  set -e
+  elapsed=$(( $(date +%s) - started ))
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+    fail "stage_timeout:${label}:${limit}s"
+  fi
+  [[ "$rc" -eq 0 ]] || fail "stage_failed:${label}:rc=${rc}"
+  printf '[part34-stage] DONE %s elapsed=%ss\n' "$label" "$elapsed"
+}
+
 
 python3 "$ROOT/scripts/validate_checkpoint.py"
 [[ -f "$ARCHIVE" && -s "$ARCHIVE" ]] || fail "reviewed_omniroute_archive_missing:$ARCHIVE"
@@ -21,10 +39,12 @@ node_version="$(node --version 2>/dev/null || true)"
 command -v npm >/dev/null 2>&1 || fail "npm_not_found"
 
 rm -rf "$BUNDLE" "$ROOT/android/app/build/generated/omnirouteAssets"
-python3 "$ROOT/scripts/build_omniroute_android_bundle.py" \
+run_stage omniroute-build-and-verify 1200 python3 "$ROOT/scripts/build_omniroute_android_bundle.py" \
   "$ARCHIVE" "$BUNDLE" \
   --evidence "$ROOT/android/app/build/outputs/vibecoder-part34-omniroute-bundle-evidence.json"
-python3 "$ROOT/scripts/stage_omniroute_android_asset.py" "$BUNDLE"
+run_stage omniroute-asset-stage 120 python3 "$ROOT/scripts/stage_omniroute_android_asset.py" "$BUNDLE" \
+  --verification-stamp "$OMNIROUTE_VERIFY_STAMP" \
+  --consume-verified-bundle
 
 # Reconstruct the fixed diagnostic identity only at build time; no binary keystore is tracked.
 KEYSTORE_DIR="$ROOT/android/signing"
@@ -36,8 +56,8 @@ actual_keystore="$(sha256sum "$KEYSTORE_FILE" | awk '{print $1}')"
 [[ "$actual_keystore" == "$expected_keystore" ]] || fail "reconstructed_keystore_integrity_mismatch"
 
 # Build the base Alpha without Node. Node is delivered later by the Play on-demand node_runtime module.
-bash "$ROOT/scripts/build_android_host.sh"
-bash "$ROOT/scripts/build_android_shell.sh"
-bash "$ROOT/scripts/verify_android_diagnostic_apk.sh" "$APK" alpha
-python3 "$ROOT/scripts/write_alpha_build_evidence.py" "$APK" "$JCODE_EVIDENCE" "$EVIDENCE"
+run_stage android-host-build 600 bash "$ROOT/scripts/build_android_host.sh"
+run_stage android-apk-build 600 bash "$ROOT/scripts/build_android_shell.sh"
+run_stage android-apk-verify 180 bash "$ROOT/scripts/verify_android_diagnostic_apk.sh" "$APK" alpha
+run_stage alpha-evidence 60 python3 "$ROOT/scripts/write_alpha_build_evidence.py" "$APK" "$JCODE_EVIDENCE" "$EVIDENCE"
 printf 'Part 34 full Alpha package evidence: %s\n' "$EVIDENCE"
