@@ -8,6 +8,8 @@ import os
 import sys
 from pathlib import Path, PurePosixPath
 
+from omniroute_android_packaging_metadata_policy import scan_gradle_default_excluded_metadata
+
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE = json.loads((ROOT / "config" / "omniroute-android-runtime-profile.json").read_text())
 MANIFEST = ".vibecoder-omniroute-bundle.json"
@@ -99,6 +101,10 @@ def main() -> int:
     package = json.loads((root / "package.json").read_text(encoding="utf-8"))
     if package.get("name") != "omniroute" or package.get("version") != "3.8.50":
         raise SystemExit("omniroute_android_bundle_package_identity_mismatch")
+    metadata_conflicts = scan_gradle_default_excluded_metadata(root)
+    if metadata_conflicts:
+        rel = metadata_conflicts[0].relative_to(root).as_posix()
+        raise SystemExit(f"omniroute_android_bundle_gradle_default_excluded_metadata_forbidden:{rel}")
     exact = set(PROFILE["forbidden_package_roots"])
     prefixes = tuple(PROFILE["forbidden_package_prefixes"])
     for nm in iter_node_modules(root):

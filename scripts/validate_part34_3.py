@@ -135,6 +135,8 @@ def main() -> int:
         "os.link",
         "[omniroute-seal] START tree-clone",
         "[omniroute-seal] START full-tree-hash",
+        "prune_gradle_default_excluded_metadata",
+        "removed_gradle_default_excluded_metadata_paths",
     ):
         require(sealer, token, "OmniRoute Android bundle sealer")
 
@@ -148,8 +150,18 @@ def main() -> int:
         "--write-verification-stamp",
         "independent_full_tree_verification",
         "omniroute_android_verification_stamp_inside_bundle_forbidden",
+        "omniroute_android_bundle_gradle_default_excluded_metadata_forbidden",
     ):
         require(verifier, token, "OmniRoute Android bundle verifier")
+
+    packaging_metadata_policy = read("scripts/omniroute_android_packaging_metadata_policy.py")
+    for token in (
+        "GRADLE_DEFAULT_EXCLUDED_EXACT_NAMES",
+        '".gitattributes"', '".gitignore"', '".gitmodules"',
+        "scan_gradle_default_excluded_metadata",
+        "`.next`", "`_not-found`",
+    ):
+        require(packaging_metadata_policy, token, "OmniRoute Android Gradle packaging-metadata policy")
 
     prepared_source = read("scripts/prepare_omniroute_android_source.py")
     for token in (
@@ -236,6 +248,8 @@ def main() -> int:
         "omniroute_android_bundle_forbidden_package:wreq-js",
         "better-sqlite3-90e2652d1716b047",
         "non-hash package suffix was over-pruned",
+        "Gradle-default metadata prune evidence incomplete",
+        "omniroute_android_bundle_gradle_default_excluded_metadata_forbidden",
     ):
         require(regression, token, "OmniRoute Android bundle regression")
 

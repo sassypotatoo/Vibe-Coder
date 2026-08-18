@@ -6,6 +6,8 @@ import argparse
 import re
 from pathlib import Path
 
+from omniroute_android_packaging_metadata_policy import scan_gradle_default_excluded_metadata
+
 ROOT = Path(__file__).resolve().parents[1]
 APP_GRADLE = ROOT / "android" / "app" / "build.gradle.kts"
 DEFAULT_STAGED_BUNDLE = ROOT / "android" / "app" / "build" / "generated" / "omnirouteAssets" / "omniroute" / "bundle"
@@ -63,6 +65,11 @@ def main() -> int:
     if not root.is_dir() or root.is_symlink():
         raise SystemExit("omniroute_aapt_policy_bundle_invalid")
     pattern = configured_pattern()
+    gradle_conflicts = scan_gradle_default_excluded_metadata(root)
+    if gradle_conflicts:
+        for path in gradle_conflicts[:20]:
+            print(f"omniroute_gradle_asset_metadata_conflict:{path.relative_to(root).as_posix()}")
+        raise SystemExit(f"omniroute_gradle_asset_metadata_would_be_dropped:{len(gradle_conflicts)}")
     conflicts: list[dict[str, object]] = []
     entries = 0
     for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):

@@ -6422,11 +6422,14 @@ def check_part34_3_omniroute_source_admission() -> None:
             "is_forbidden_package_identity",
             ".vibecoder-omniroute-bundle.json",
             "tree_sha256",
+            "removed_gradle_default_excluded_metadata_paths",
+            "prune_gradle_default_excluded_metadata",
         ),
         "scripts/verify_omniroute_android_bundle.py": (
             "omniroute_android_bundle_file_manifest_mismatch",
             "omniroute_android_bundle_tree_hash_mismatch",
             "is_forbidden_package_identity",
+            "omniroute_android_bundle_gradle_default_excluded_metadata_forbidden",
         ),
         "scripts/build_omniroute_android_bundle.py": (
             "omniroute_android_build_node_version_mismatch",
@@ -6462,6 +6465,13 @@ def check_part34_3_omniroute_source_admission() -> None:
             "omniroute_android_bundle_forbidden_package:wreq-js",
             "better-sqlite3-90e2652d1716b047",
             "non-hash package suffix was over-pruned",
+            "Gradle-default metadata prune evidence incomplete",
+            "omniroute_android_bundle_gradle_default_excluded_metadata_forbidden",
+        ),
+        "scripts/omniroute_android_packaging_metadata_policy.py": (
+            "GRADLE_DEFAULT_EXCLUDED_EXACT_NAMES",
+            '".gitattributes"', '".gitignore"', '".gitmodules"',
+            "scan_gradle_default_excluded_metadata",
         ),
         "scripts/stage_omniroute_android_asset.py": (
             "omniroute_asset_stage_bundle_verification_failed",

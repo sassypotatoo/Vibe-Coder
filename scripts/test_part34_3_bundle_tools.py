@@ -28,6 +28,9 @@ def fixture(root: Path) -> None:
         "node_modules/better-sqlite3-helper",
         "node_modules/sqlite-vec-linux-x64", "node_modules/@img/sharp-linux-x64",
         "src/mitm/tproxy/native/build/Release", "assets",
+        ".next/server/app/_not-found", ".well-known",
+        "node_modules/roarr/node_modules/sprintf-js/dist",
+        "node_modules/example-with-metadata/.git",
     ]:
         (root / rel).mkdir(parents=True, exist_ok=True)
     (root / "package.json").write_text('{"name":"omniroute","version":"3.8.50"}\n')
@@ -54,6 +57,13 @@ def fixture(root: Path) -> None:
     (root / "node_modules/sqlite-vec-linux-x64/vec0.so").write_bytes(b"\x7fELFjunk")
     (root / "node_modules/@img/sharp-linux-x64/sharp.node").write_bytes(b"\x7fELFjunk")
     (root / "src/mitm/tproxy/native/build/Release/transparent.node").write_bytes(b"\x7fELFjunk")
+    # Reproduce CI run #26: Gradle's generated-assets FileTree drops SCM metadata
+    # such as nested .gitattributes before AAPT, causing a one-file manifest mismatch.
+    (root / "node_modules/roarr/node_modules/sprintf-js/dist/.gitattributes").write_text("* text=auto\n")
+    (root / "node_modules/roarr/node_modules/sprintf-js/dist/.gitignore").write_text("dist-cache\n")
+    (root / "node_modules/example-with-metadata/.git/config").write_text("[core]\n")
+    (root / ".next/server/app/_not-found/page.js").write_text("runtime\n")
+    (root / ".well-known/agent.json").write_text("{}\n")
 
 
 def main() -> int:
@@ -75,6 +85,20 @@ def main() -> int:
         manifest = json.loads((out / ".vibecoder-omniroute-bundle.json").read_text())
         if manifest["apk_asset_packaged"] or manifest["service_round_trip_proven"]:
             raise AssertionError("synthetic bundle overclaimed runtime proof")
+        removed_metadata = set(manifest.get("removed_gradle_default_excluded_metadata_paths", []))
+        expected_metadata = {
+            "node_modules/roarr/node_modules/sprintf-js/dist/.gitattributes",
+            "node_modules/roarr/node_modules/sprintf-js/dist/.gitignore",
+            "node_modules/example-with-metadata/.git",
+        }
+        if not expected_metadata.issubset(removed_metadata):
+            raise AssertionError(f"Gradle-default metadata prune evidence incomplete: {removed_metadata}")
+        for rel in expected_metadata:
+            if (out / rel).exists():
+                raise AssertionError(f"Gradle-default metadata survived sealing: {rel}")
+        for rel in (".next/server/app/_not-found/page.js", ".well-known/agent.json"):
+            if not (out / rel).is_file():
+                raise AssertionError(f"legitimate hidden/underscore runtime path was over-pruned: {rel}")
 
         # Hash tamper must fail and produce actionable mismatch diagnostics.
         (out / "server.js").write_text("tampered\n")
@@ -102,6 +126,17 @@ def main() -> int:
         text = run([sys.executable, str(SEAL), str(ext), str(base / "external-out")], expect=1)
         if "omniroute_bundle_external_symlink_forbidden" not in text:
             raise AssertionError("external symlink was not rejected")
+
+        # Independent verifier must reject Gradle-default-excluded metadata if any producer
+        # reintroduces it after sealing, before a doomed APK build is attempted.
+        metadata_src = base / "metadata-src"; fixture(metadata_src)
+        metadata_sealed = base / "metadata-sealed"; run([sys.executable, str(SEAL), str(metadata_src), str(metadata_sealed)])
+        reintroduced = metadata_sealed / "node_modules/roarr/node_modules/sprintf-js/dist/.gitattributes"
+        reintroduced.parent.mkdir(parents=True, exist_ok=True)
+        reintroduced.write_text("* text=auto\n")
+        text = run([sys.executable, str(VERIFY), str(metadata_sealed)], expect=1)
+        if "omniroute_android_bundle_gradle_default_excluded_metadata_forbidden:node_modules/roarr/node_modules/sprintf-js/dist/.gitattributes" not in text:
+            raise AssertionError("verifier did not reject Gradle-default-excluded runtime metadata")
 
         # Independent verifier must enforce forbidden-package policy even if bytes are pure JS.
         clean = base / "clean"; fixture(clean)

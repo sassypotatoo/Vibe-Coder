@@ -18,6 +18,8 @@ import tempfile
 import time
 from pathlib import Path, PurePosixPath
 
+from omniroute_android_packaging_metadata_policy import scan_gradle_default_excluded_metadata
+
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE_PATH = ROOT / "config" / "omniroute-android-runtime-profile.json"
 MANIFEST_NAME = ".vibecoder-omniroute-bundle.json"
@@ -196,6 +198,25 @@ def prune_relative_roots(root: Path, profile: dict) -> list[str]:
     return removed
 
 
+def prune_gradle_default_excluded_metadata(root: Path) -> list[str]:
+    """Remove runtime-inert SCM/editor metadata before the manifest tree is hashed.
+
+    Gradle's generated-assets FileTree applies default excludes before AAPT. If these files
+    survive sealing, the APK silently contains fewer files than the independently verified
+    manifest. Removing the whole default-excluded metadata class here keeps the seal and APK
+    contracts identical without weakening packaging of legitimate `.next` / `_not-found` paths.
+    """
+    removed: list[str] = []
+    for target in scan_gradle_default_excluded_metadata(root):
+        rel = target.relative_to(root).as_posix()
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target)
+        elif target.exists() or target.is_symlink():
+            target.unlink()
+        removed.append(rel)
+    return sorted(removed)
+
+
 def is_host_native_binary(path: Path, forbidden_ext: set[str]) -> bool:
     if path.suffix.lower() in forbidden_ext:
         return True
@@ -297,6 +318,7 @@ def main() -> int:
         print("[omniroute-seal] START forbidden-prune", flush=True)
         removed_packages = prune_packages(temp, profile)
         removed_roots = prune_relative_roots(temp, profile)
+        removed_gradle_metadata = prune_gradle_default_excluded_metadata(temp)
         phase_done("forbidden-prune", started)
         started = time.monotonic()
         print("[omniroute-seal] START full-tree-hash", flush=True)
@@ -314,6 +336,7 @@ def main() -> int:
             "feature_degradations": profile["feature_degradations"],
             "removed_package_paths": removed_packages,
             "removed_relative_roots": removed_roots,
+            "removed_gradle_default_excluded_metadata_paths": removed_gradle_metadata,
             "file_count": len(files),
             "total_bytes": total_bytes,
             "tree_sha256": tree_digest(files),

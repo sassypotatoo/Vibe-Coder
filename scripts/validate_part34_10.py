@@ -143,6 +143,8 @@ need(app_gradle, 'options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))',
 need(app_gradle, 'androidResources.ignoreAssetsPattern = "__vibecoder_aapt_ignore_none__"', 'AAPT transparent OmniRoute asset sentinel')
 need(read(Path('scripts/part34_alpha_build_and_verify.sh')), 'omniroute-aapt-policy', 'pre-Gradle OmniRoute AAPT transparency gate')
 need(read(Path('scripts/verify_omniroute_aapt_asset_policy.py')), 'omniroute_aapt_policy_would_drop_runtime_entries', 'AAPT runtime collision failure token')
+need(read(Path('scripts/verify_omniroute_aapt_asset_policy.py')), 'omniroute_gradle_asset_metadata_would_be_dropped', 'Gradle default-exclude metadata preflight token')
+need(read(Path('scripts/omniroute_android_packaging_metadata_policy.py')), '".gitattributes"', 'Gradle default-exclude metadata policy')
 need(apk_verify, 'vibecoder-part34-apk-asset-diff.json', 'APK OmniRoute mismatch diagnostics artifact')
 
 for token in (
