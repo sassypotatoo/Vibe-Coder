@@ -77,6 +77,10 @@ for token in (
     'package_node_runtime_release.sh',
     'gh release create',
     'gh release upload',
+    'Verify published Node runtime download URL',
+    'https://github.com/${GITHUB_REPOSITORY}/releases/download/${NODE_RUNTIME_TAG}/${NODE_RUNTIME_ASSET}',
+    'curl --fail --location --retry 8',
+    'Published Node runtime public URL verification PASSED',
 ):
     if token not in node_workflow:
         die('downloadable_node_workflow_missing:' + token)

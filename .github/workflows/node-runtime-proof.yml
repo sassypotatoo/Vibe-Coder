@@ -144,6 +144,51 @@ jobs:
               --notes "Development runtime downloaded by VibeCoder first-run setup."
           fi
 
+      - name: Verify published Node runtime download URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${NODE_RUNTIME_TAG}/${NODE_RUNTIME_ASSET}"
+          HASH_URL="${RUNTIME_URL}.sha256"
+          PROBE_DIR="${RUNNER_TEMP}/vibecoder-node-runtime-public-probe"
+          rm -rf "$PROBE_DIR"
+          mkdir -p "$PROBE_DIR"
+          echo "Probing the exact first-run URL used by VibeCoder: $RUNTIME_URL"
+          curl --fail --location --retry 8 --retry-delay 15 --retry-all-errors \
+            --connect-timeout 20 --max-time 600 \
+            --output "$PROBE_DIR/$NODE_RUNTIME_ASSET" "$RUNTIME_URL"
+          curl --fail --location --retry 8 --retry-delay 15 --retry-all-errors \
+            --connect-timeout 20 --max-time 120 \
+            --output "$PROBE_DIR/$NODE_RUNTIME_ASSET.sha256" "$HASH_URL"
+          test -s "$PROBE_DIR/$NODE_RUNTIME_ASSET"
+          test -s "$PROBE_DIR/$NODE_RUNTIME_ASSET.sha256"
+          EXPECTED_SHA="$(awk 'NF {print $1; exit}' "$PROBE_DIR/$NODE_RUNTIME_ASSET.sha256")"
+          ACTUAL_SHA="$(sha256sum "$PROBE_DIR/$NODE_RUNTIME_ASSET" | awk '{print $1}')"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-fA-F]{64}$ ]]
+          [[ "${ACTUAL_SHA,,}" == "${EXPECTED_SHA,,}" ]]
+          python3 - "$PROBE_DIR/$NODE_RUNTIME_ASSET" <<'PY'
+          import json, sys, zipfile
+          apk = sys.argv[1]
+          with zipfile.ZipFile(apk) as z:
+              names = set(z.namelist())
+              assert 'lib/arm64-v8a/libvibecoder_node_exec.so' in names, 'node payload missing'
+              assert z.getinfo('lib/arm64-v8a/libvibecoder_node_exec.so').file_size > 0, 'node payload empty'
+              manifest = json.loads(z.read('assets/node-runtime/manifest.json'))
+          expected = {
+              'component_id': 'node',
+              'version': '24.19.0',
+              'abi': 'arm64-v8a',
+              'libc': 'bionic',
+              'delivery': 'github_release_packageinstaller_split',
+              'split': 'node_runtime',
+              'release_tag': 'vibecoder-node-runtime-24.19.0-v31',
+              'runtime_apk': 'vibecoder-node-runtime-arm64-v31.apk',
+          }
+          for key, value in expected.items():
+              assert manifest.get(key) == value, f'manifest mismatch: {key}'
+          print('Published Node runtime public URL verification PASSED')
+          PY
+
       - name: Upload reusable runtime package artifact
         if: steps.runtime_release.outputs.exists != 'true'
         uses: actions/upload-artifact@v7.0.1
