@@ -98,6 +98,7 @@ final class NodeRuntimeSetupUi {
         }
 
         boolean active = "preparing".equals(state.status)
+                || "waiting_for_release".equals(state.status)
                 || "downloading".equals(state.status)
                 || "downloaded".equals(state.status)
                 || "awaiting_permission".equals(state.status)
@@ -109,7 +110,9 @@ final class NodeRuntimeSetupUi {
         primary.setText("failed".equals(state.status) || "cancelled".equals(state.status)
                 ? "Retry Node.js Setup"
                 : "Download & Set Up Node.js");
-        cancel.setVisibility(("downloading".equals(state.status) || "preparing".equals(state.status))
+        cancel.setVisibility(("downloading".equals(state.status)
+                || "waiting_for_release".equals(state.status)
+                || "preparing".equals(state.status))
                 ? View.VISIBLE : View.GONE);
 
         int percent = state.totalBytes > 0L ? state.percent : 0;
@@ -132,6 +135,7 @@ final class NodeRuntimeSetupUi {
 
         switch (state.status) {
             case "preparing": status.setText("Preparing Node.js download…"); break;
+            case "waiting_for_release": status.setText("Node.js release is still becoming available. Retrying…"); break;
             case "downloading": status.setText("Downloading Node.js runtime…"); break;
             case "downloaded": status.setText("Download complete. Verifying runtime…"); break;
             case "awaiting_permission": status.setText("Allow VibeCoder to install its Node.js runtime once."); break;
@@ -146,6 +150,7 @@ final class NodeRuntimeSetupUi {
     }
 
     private static String statusProgressText(String state) {
+        if ("waiting_for_release".equals(state)) return "Retrying…";
         if ("installing".equals(state) || "awaiting_confirmation".equals(state)) return "Installing…";
         if ("awaiting_permission".equals(state)) return "Permission required";
         if ("restart_required".equals(state)) return "Restarting…";
@@ -153,6 +158,9 @@ final class NodeRuntimeSetupUi {
     }
 
     private static String descriptionFor(String state) {
+        if ("waiting_for_release".equals(state)) {
+            return "GitHub has not exposed the fixed Node.js release asset yet; VibeCoder is retrying the exact URL.";
+        }
         if ("awaiting_permission".equals(state)) {
             return "Android may ask once for permission to install the downloaded VibeCoder runtime.";
         }

@@ -81,6 +81,11 @@ for token in (
     'https://github.com/${GITHUB_REPOSITORY}/releases/download/${NODE_RUNTIME_TAG}/${NODE_RUNTIME_ASSET}',
     'curl --fail --location --retry 8',
     'Published Node runtime public URL verification PASSED',
+    '--json isDraft,isPrerelease,assets',
+    'gh release edit "$NODE_RUNTIME_TAG"',
+    '--draft=false --prerelease=false',
+    'Node runtime public release already usable: $exists',
+    '--head',
 ):
     if token not in node_workflow:
         die('downloadable_node_workflow_missing:' + token)

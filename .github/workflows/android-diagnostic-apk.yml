@@ -52,6 +52,8 @@ on:
       - "scripts/sanitize_node_android_host_makefiles.py"
       - "scripts/patch_node_android_zlib_cpufeatures.py"
       - "scripts/test_part34_10_compile_repairs.py"
+      - "scripts/test_part34_10_16_omniroute_free_bootstrap.py"
+      - "scripts/test_part34_10_17_node_404_recovery.py"
       - "scripts/verify_jcode_android_source.sh"
       - "scripts/verify_android_elf.py"
       - "scripts/verify_android_diagnostic_apk.sh"
@@ -106,6 +108,8 @@ env:
   ANDROID_NDK_VERSION: "28.2.13676358"
   ANDROID_CMAKE_VERSION: "3.22.1"
   VIBECODER_ANDROID_API: "29"
+  NODE_RUNTIME_TAG: "vibecoder-node-runtime-24.19.0-v31"
+  NODE_RUNTIME_ASSET: "vibecoder-node-runtime-arm64-v31.apk"
 
 jobs:
   minimal-shell:
@@ -175,6 +179,8 @@ jobs:
           python3 scripts/test_part34_10_ui_tools.py
           python3 scripts/test_part34_10_alpha_package_tools.py
           python3 scripts/test_part34_10_15_node_delivery.py
+          python3 scripts/test_part34_10_16_omniroute_free_bootstrap.py
+          python3 scripts/test_part34_10_17_node_404_recovery.py
           python3 scripts/test_part34_10_aapt_asset_policy.py
           python3 scripts/test_part34_10_compile_repairs.py
 
@@ -274,6 +280,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
+      - name: Require public Node runtime before publishing Alpha
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${NODE_RUNTIME_TAG}/${NODE_RUNTIME_ASSET}"
+          echo "Checking the exact first-run Node URL before building a user-facing Alpha: $RUNTIME_URL"
+          curl --fail --location --silent --show-error --head \
+            --retry 5 --retry-delay 10 --retry-all-errors \
+            --connect-timeout 20 --max-time 120 "$RUNTIME_URL" >/dev/null
+
       - uses: actions/setup-java@v5.6.0
         with:
           distribution: temurin
@@ -349,6 +365,8 @@ jobs:
           python3 scripts/test_part34_10_ui_tools.py
           python3 scripts/test_part34_10_alpha_package_tools.py
           python3 scripts/test_part34_10_15_node_delivery.py
+          python3 scripts/test_part34_10_16_omniroute_free_bootstrap.py
+          python3 scripts/test_part34_10_17_node_404_recovery.py
           python3 scripts/test_part34_10_aapt_asset_policy.py
           python3 scripts/test_part34_10_compile_repairs.py
           bash scripts/part34_10_strict_java_compile.sh

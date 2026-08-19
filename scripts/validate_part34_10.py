@@ -247,10 +247,10 @@ if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'node_direct_setup_download_source_ready_device_proof_pending':
-    raise SystemExit('Part 34.10.15 PROJECT_STATE status mismatch')
-if project.get('step') != '34.10.15-node-direct-setup-download':
-    raise SystemExit('Part 34.10.15 PROJECT_STATE step mismatch')
+if project.get('status') != 'node_http_404_recovery_source_ready_device_proof_pending':
+    raise SystemExit('Part 34.10.17 PROJECT_STATE status mismatch')
+if project.get('step') != '34.10.17-node-http-404-recovery':
+    raise SystemExit('Part 34.10.17 PROJECT_STATE step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -288,10 +288,10 @@ if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'node_direct_setup_download_source_ready_device_proof_pending':
-    raise SystemExit('Part 34.10.15 PART34_STATE status mismatch')
-if state.get('step') != '34.10.15-node-direct-setup-download':
-    raise SystemExit('Part 34.10.15 PART34_STATE step mismatch')
+if state.get('status') != 'node_http_404_recovery_source_ready_device_proof_pending':
+    raise SystemExit('Part 34.10.17 PART34_STATE status mismatch')
+if state.get('step') != '34.10.17-node-http-404-recovery':
+    raise SystemExit('Part 34.10.17 PART34_STATE step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -408,10 +408,20 @@ for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
         raise SystemExit(f'Part 34.10.14 {label} generated host graph object contract mismatch')
     if record.get('node_ci_timeout_minutes') != 360 or record.get('node_ci_build_jobs') != 4:
         raise SystemExit(f'Part 34.10.14 {label} Node CI throughput/timeout contract mismatch')
-    if record.get('status') != 'node_direct_setup_download_source_ready_device_proof_pending':
-        raise SystemExit(f'Part 34.10.15 {label} status mismatch')
-    if record.get('step') != '34.10.15-node-direct-setup-download':
-        raise SystemExit(f'Part 34.10.15 {label} step mismatch')
+    if record.get('node_runtime_http_404_bounded_retry') is not True:
+        raise SystemExit(f'Part 34.10.17 {label} bounded HTTP 404 retry missing')
+    if record.get('node_runtime_http_404_retry_attempts') != 6:
+        raise SystemExit(f'Part 34.10.17 {label} HTTP 404 retry-attempt contract mismatch')
+    if record.get('node_runtime_release_public_before_alpha_required') is not True:
+        raise SystemExit(f'Part 34.10.17 {label} Alpha public-runtime gate missing')
+    if record.get('node_runtime_post_publish_alpha_dispatch') is not True:
+        raise SystemExit(f'Part 34.10.17 {label} post-publish Alpha dispatch missing')
+    if record.get('node_runtime_http_404_device_retest_pending') is not True:
+        raise SystemExit(f'Part 34.10.17 {label} must preserve pending device proof')
+    if record.get('status') != 'node_http_404_recovery_source_ready_device_proof_pending':
+        raise SystemExit(f'Part 34.10.17 {label} status mismatch')
+    if record.get('step') != '34.10.17-node-http-404-recovery':
+        raise SystemExit(f'Part 34.10.17 {label} step mismatch')
     if record.get('fresh_android_compile') is not False or record.get('full_alpha_apk_compiled') is not False:
         raise SystemExit(f'Part 34.10.14 {label} overclaims post-repair compile/full Alpha proof')
 
@@ -600,4 +610,4 @@ for forbidden in ('com.google.android.play:feature-delivery', 'SplitCompatApplic
         raise SystemExit('Part 34.10.15 Play runtime dependency survived: ' + forbidden)
 if (ROOT/'.github/workflows/android-play-bundle.yml').exists():
     raise SystemExit('Part 34.10.15 Play bundle workflow must be absent during development')
-print('Part 34.10.15 direct Node setup validation PASSED')
+print('Part 34.10.17 Node HTTP 404 recovery validation PASSED')

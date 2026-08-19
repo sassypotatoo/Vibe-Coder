@@ -8,13 +8,14 @@ use sha2::{Digest, Sha256};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 use uuid::Uuid;
 use vibecoder_agent_jcode::JcodeAgentRuntime;
 use vibecoder_checkpoint_local::{LocalCheckpointConfig, LocalCheckpointStore};
 use vibecoder_core::{ConversationModelTurnCancellation, VibeCoderCore};
 use vibecoder_domain::{ConversationId, ModelRef, ProjectId, Result, VibeCoderError};
 use vibecoder_gateway_contract::{GatewayCredential, GatewayExecutionProfile};
-use vibecoder_gateway_omniroute::{OmniRouteClient, OmniRouteConfig};
+use vibecoder_gateway_omniroute::{OmniRouteClient, OmniRouteConfig, OmniRouteProviderBootstrap};
 use vibecoder_persistence_local::{LocalProjectStateConfig, LocalProjectStateStore};
 use vibecoder_routing::{ModelRoutePolicyConfig, ModelRouteTargetConfig};
 use vibecoder_workspace_local::{LocalWorkspaceConfig, LocalWorkspaceRuntime};
@@ -24,6 +25,8 @@ const CHAT_MAX_OUTPUT_TOKENS: u32 = 4096;
 const CHAT_GATEWAY_TIMEOUT_MS: u64 = 120_000;
 const CHAT_GATEWAY_MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 const CHAT_FFI_MAX_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
+const FREE_PROVIDER_MODEL_POLL_ATTEMPTS: usize = 24;
+const FREE_PROVIDER_MODEL_POLL_DELAY_MS: u64 = 250;
 
 static APP_CONTROLLER: OnceLock<Mutex<Option<Arc<AndroidAppController>>>> = OnceLock::new();
 
@@ -33,6 +36,7 @@ struct AndroidAppController {
     key: String,
     core: AndroidCore,
     executor: Arc<AndroidAsyncExecutor>,
+    provider_bootstrap: OmniRouteProviderBootstrap,
     selected_model: Mutex<Option<ModelRef>>,
     active_turn: Mutex<Option<ActiveChatTurn>>,
 }
@@ -453,11 +457,13 @@ impl AndroidAppController {
         let host = AndroidHostRuntime::from_inventory_json(paths, inventory)?;
         let executor = host.async_executor();
         let agent = JcodeAgentRuntime::new(host.jcode_connection_config()?)?;
-        let gateway = OmniRouteClient::new(OmniRouteConfig {
+        let gateway_config = OmniRouteConfig {
             base_url: LOOPBACK_BASE_URL.into(),
             request_timeout_ms: CHAT_GATEWAY_TIMEOUT_MS,
             max_response_bytes: CHAT_GATEWAY_MAX_RESPONSE_BYTES,
-        })?;
+        };
+        let provider_bootstrap = OmniRouteProviderBootstrap::new(gateway_config.clone())?;
+        let gateway = OmniRouteClient::new(gateway_config)?;
         let workspace = LocalWorkspaceRuntime::initialize(LocalWorkspaceConfig {
             app_private_dir: app_private_dir.clone(),
         })?;
@@ -475,6 +481,7 @@ impl AndroidAppController {
             key,
             core,
             executor,
+            provider_bootstrap,
             selected_model: Mutex::new(None),
             active_turn: Mutex::new(None),
         })
@@ -486,18 +493,14 @@ impl AndroidAppController {
                 .core
                 .gateway_execution_profile(GatewayCredential::Anonymous)
                 .await?;
-            let models = self
-                .core
-                .list_gateway_models(GatewayCredential::Anonymous)
-                .await?;
+            if !deterministic_profile(&profile) {
+                return Err(host_error("android_chat_gateway_profile_not_deterministic"));
+            }
+            let models = self.load_models_with_free_provider_bootstrap().await;
             Ok::<_, VibeCoderError>((profile, models))
         });
         match result {
-            Ok((profile, mut models)) => {
-                let verified = deterministic_profile(&profile);
-                if !verified {
-                    return Err(host_error("android_chat_gateway_profile_not_deterministic"));
-                }
+            Ok((_profile, Ok(mut models))) => {
                 models.retain(|model| android_chat_model_id_usable(&model.id));
                 models.sort_by(|left, right| left.id.cmp(&right.id));
                 let selected = models.first().cloned();
@@ -517,18 +520,75 @@ impl AndroidAppController {
                     error: None,
                 })
             }
-            Err(error) => serialize_bounded(&BootstrapSnapshot {
-                schema: 1,
-                status: "gateway_not_ready",
-                controller_ready: true,
-                chat_ready: false,
-                runtime_profile_verified: false,
-                usable_models: 0,
-                selected_model_id: None,
-                provider_setup_required: false,
-                error: Some(stable_error_code(&error)),
-            }),
+            Ok((_profile, Err(error))) => {
+                *self
+                    .selected_model
+                    .lock()
+                    .map_err(|_| host_error("android_chat_model_selection_poisoned"))? = None;
+                serialize_bounded(&BootstrapSnapshot {
+                    schema: 1,
+                    status: "gateway_not_ready",
+                    controller_ready: true,
+                    chat_ready: false,
+                    runtime_profile_verified: true,
+                    usable_models: 0,
+                    selected_model_id: None,
+                    provider_setup_required: false,
+                    error: Some(stable_error_code(&error)),
+                })
+            }
+            Err(error) => {
+                *self
+                    .selected_model
+                    .lock()
+                    .map_err(|_| host_error("android_chat_model_selection_poisoned"))? = None;
+                serialize_bounded(&BootstrapSnapshot {
+                    schema: 1,
+                    status: "gateway_not_ready",
+                    controller_ready: true,
+                    chat_ready: false,
+                    runtime_profile_verified: false,
+                    usable_models: 0,
+                    selected_model_id: None,
+                    provider_setup_required: false,
+                    error: Some(stable_error_code(&error)),
+                })
+            }
         }
+    }
+
+    async fn load_models_with_free_provider_bootstrap(&self) -> Result<Vec<ModelRef>> {
+        match self
+            .core
+            .list_gateway_models(GatewayCredential::Anonymous)
+            .await
+        {
+            Ok(models) => return Ok(models),
+            Err(VibeCoderError::Gateway(code)) if code == "no_usable_chat_models" => {}
+            Err(error) => return Err(error),
+        }
+
+        self.provider_bootstrap
+            .ensure_vibecoder_free_provider()
+            .await?;
+
+        for attempt in 0..FREE_PROVIDER_MODEL_POLL_ATTEMPTS {
+            match self
+                .core
+                .list_gateway_models(GatewayCredential::Anonymous)
+                .await
+            {
+                Ok(models) => return Ok(models),
+                Err(VibeCoderError::Gateway(code)) if code == "no_usable_chat_models" => {
+                    if attempt + 1 == FREE_PROVIDER_MODEL_POLL_ATTEMPTS {
+                        return Err(VibeCoderError::Gateway(code));
+                    }
+                    tokio::time::sleep(Duration::from_millis(FREE_PROVIDER_MODEL_POLL_DELAY_MS)).await;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Err(host_error("android_chat_free_provider_catalog_poll_exhausted"))
     }
 
     fn select_exact_model(&self) -> Result<ModelRef> {

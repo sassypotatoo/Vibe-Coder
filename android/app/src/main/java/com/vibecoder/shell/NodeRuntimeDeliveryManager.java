@@ -44,6 +44,8 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
     private static final String ACTION_INSTALL_RESULT = "com.vibecoder.shell.NODE_RUNTIME_INSTALL_RESULT";
     private static final int UNKNOWN_SOURCES_REQUEST_CODE = 24020;
     private static final int BUFFER_SIZE = 256 * 1024;
+    private static final int DOWNLOAD_MAX_ATTEMPTS = 6;
+    private static final long[] DOWNLOAD_RETRY_DELAYS_MS = {2_000L, 5_000L, 10_000L, 20_000L, 30_000L};
 
     interface Listener {
         void onNodeRuntimeState(State state);
@@ -207,15 +209,28 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
                 throw new IllegalStateException("runtime_previous_download_delete_failed");
             }
 
-            connection = (HttpURLConnection) new URL(RUNTIME_URL).openConnection();
-            connection.setInstanceFollowRedirects(true);
-            connection.setConnectTimeout(20_000);
-            connection.setReadTimeout(45_000);
-            connection.setRequestProperty("Accept", "application/vnd.android.package-archive,application/octet-stream,*/*");
-            connection.setRequestProperty("User-Agent", "VibeCoder-Android-Node-Setup/1");
-            int status = connection.getResponseCode();
-            if (status < 200 || status >= 300) {
-                throw new IllegalStateException("runtime_download_http_" + status);
+            int status = -1;
+            for (int attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt++) {
+                if (cancelRequested.get()) throw new CancelledException();
+                if (connection != null) {
+                    connection.disconnect();
+                    connection = null;
+                }
+                connection = openRuntimeDownloadConnection();
+                status = connection.getResponseCode();
+                if (status >= 200 && status < 300) break;
+                if (!isRetryableDownloadStatus(status) || attempt >= DOWNLOAD_MAX_ATTEMPTS) {
+                    throw new IllegalStateException("runtime_download_http_" + status);
+                }
+                listener.onNodeRuntimeState(new State(
+                        "waiting_for_release", 0L, 0L,
+                        "runtime_download_http_" + status + "_retry_" + attempt, null));
+                connection.disconnect();
+                connection = null;
+                sleepWithCancellation(DOWNLOAD_RETRY_DELAYS_MS[attempt - 1]);
+            }
+            if (connection == null || status < 200 || status >= 300) {
+                throw new IllegalStateException("runtime_download_unavailable");
             }
             long total = connection.getContentLengthLong();
             long downloaded = 0L;
@@ -256,6 +271,35 @@ final class NodeRuntimeDeliveryManager implements AutoCloseable {
             emitTerminal(new State("failed", 0L, 0L, safeError(error), null));
         } finally {
             if (connection != null) connection.disconnect();
+        }
+    }
+
+    private HttpURLConnection openRuntimeDownloadConnection() throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(RUNTIME_URL).openConnection();
+        connection.setInstanceFollowRedirects(true);
+        connection.setConnectTimeout(20_000);
+        connection.setReadTimeout(45_000);
+        connection.setRequestProperty(
+                "Accept", "application/vnd.android.package-archive,application/octet-stream,*/*");
+        connection.setRequestProperty("User-Agent", "VibeCoder-Android-Node-Setup/1");
+        return connection;
+    }
+
+    private static boolean isRetryableDownloadStatus(int status) {
+        return status == HttpURLConnection.HTTP_NOT_FOUND
+                || status == HttpURLConnection.HTTP_CLIENT_TIMEOUT
+                || status == 425
+                || status == 429
+                || status >= 500;
+    }
+
+    private void sleepWithCancellation(long delayMs) throws CancelledException {
+        long deadline = android.os.SystemClock.elapsedRealtime() + Math.max(0L, delayMs);
+        while (true) {
+            if (cancelRequested.get() || closed) throw new CancelledException();
+            long remaining = deadline - android.os.SystemClock.elapsedRealtime();
+            if (remaining <= 0L) return;
+            android.os.SystemClock.sleep(Math.min(remaining, 250L));
         }
     }
 

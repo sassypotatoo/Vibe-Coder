@@ -5,6 +5,7 @@
 //! unauthenticated upstream `HEAD` route remains availability-only and is never promoted to health.
 
 mod auth;
+mod bootstrap;
 mod catalog;
 mod chat;
 mod client;
@@ -13,5 +14,9 @@ mod gateway;
 mod profile;
 
 pub use auth::RequestAuth;
+pub use bootstrap::{
+    FreeProviderBootstrapOutcome, OmniRouteProviderBootstrap, VIBECODER_FREE_PROVIDER_ID,
+    VIBECODER_FREE_PROVIDER_NAME,
+};
 pub use client::OmniRouteClient;
 pub use config::OmniRouteConfig;

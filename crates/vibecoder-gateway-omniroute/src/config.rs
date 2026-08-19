@@ -193,7 +193,7 @@ fn has_raw_dot_segment(raw: &str) -> bool {
         || path.contains("/../")
 }
 
-fn is_loopback_host(host: Option<Host<&str>>) -> bool {
+pub(crate) fn is_loopback_host(host: Option<Host<&str>>) -> bool {
     match host {
         Some(Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
         Some(Host::Ipv4(address)) => is_ipv4_loopback(address),
