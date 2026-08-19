@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "step": "34.10.18-alpha-node-publication-race-repair",
+  "observed_from_uploaded_github_actions_log": {
+    "source_commit": "ac92cf92bf5ab2345480a905d580a2b1b905db75",
+    "alpha_job": "Alpha APK (Jcode + OmniRoute; Node downloaded during setup)",
+    "failing_step": "Require public Node runtime before publishing Alpha",
+    "observed_http_status": 404,
+    "observed_attempts": 6,
+    "final_exit_code": 22,
+    "first_observed_at_utc": "2026-08-19T05:26:01.3069192Z",
+    "last_observed_at_utc": "2026-08-19T05:26:51.4743058Z"
+  },
+  "classification": "workflow sequencing race: Alpha push run reached public-runtime gate before the independent Node release workflow had made the exact versioned release asset public",
+  "repair": {
+    "old_behavior": "missing public runtime made the Android diagnostic workflow red",
+    "new_behavior": "a dedicated non-failing publication gate reports ready=false and skips only full Alpha packaging",
+    "post_publish_behavior": "Node release workflow remains responsible for exact URL/integrity verification and dispatches a fresh Android workflow after publication",
+    "exact_runtime_url_contract_unchanged": true
+  },
+  "proof_status": {
+    "source_regression_ready": true,
+    "public_release_url_verified": false,
+    "device_download_install_verified": false
+  }
+}

@@ -784,13 +784,20 @@
     "selected_model_from_fresh_exact_catalog": true,
     "send_controller_jni_wired": true,
     "send_unicode_safe_jni_decode": true,
-    "status": "node_http_404_recovery_source_ready_device_proof_pending",
-    "step": "34.10.17-node-http-404-recovery",
+    "status": "node_http_404_release_race_repaired_publication_proof_pending",
+    "step": "34.10.18-alpha-node-publication-race-repair",
     "stop_controller_jni_wired": true,
     "strict_java_ci_gate": true,
     "strict_java_stub_compile_proven_in_audit_runner": true,
     "system_bar_and_ime_insets_handled": true,
-    "vibecoder_core_tokio_direct_dependency_fixed": true
+    "vibecoder_core_tokio_direct_dependency_fixed": true,
+    "latest_alpha_publication_race_ci_commit": "ac92cf92bf5ab2345480a905d580a2b1b905db75",
+    "latest_alpha_publication_race_http_status": 404,
+    "latest_alpha_publication_race_attempts": 6,
+    "alpha_node_release_race_repaired": true,
+    "alpha_runtime_gate_nonfailing_until_public": true,
+    "alpha_runtime_gate_skips_packaging_when_unready": true,
+    "alpha_runtime_gate_fresh_dispatch_after_node_publish": true
   },
   "part34_2_node_runtime": {
     "android_abi": "arm64-v8a",

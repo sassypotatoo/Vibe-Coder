@@ -168,13 +168,22 @@
     "selected_model_from_fresh_exact_catalog": true,
     "send_bridge_wired": true,
     "send_unicode_safe_jni_decode": true,
-    "status": "node_http_404_recovery_source_ready_device_proof_pending",
-    "step": "34.10.17-node-http-404-recovery",
+    "status": "node_http_404_release_race_repaired_publication_proof_pending",
+    "step": "34.10.18-alpha-node-publication-race-repair",
     "stop_bridge_wired": true,
     "strict_java_ci_gate": true,
     "strict_java_stub_compile_proven_in_audit_runner": true,
     "system_bar_and_ime_insets_handled": true,
-    "vibecoder_core_tokio_direct_dependency_fixed": true
+    "vibecoder_core_tokio_direct_dependency_fixed": true,
+    "latest_ci_node_http_404_observed_during_alpha_gate": true,
+    "latest_ci_alpha_gate_404_attempts": 6,
+    "alpha_node_release_race_repaired": true,
+    "alpha_runtime_gate_nonfailing_until_public": true,
+    "alpha_runtime_gate_skips_packaging_when_unready": true,
+    "alpha_runtime_gate_fresh_dispatch_after_node_publish": true,
+    "latest_alpha_publication_race_ci_commit": "ac92cf92bf5ab2345480a905d580a2b1b905db75",
+    "latest_alpha_publication_race_http_status": 404,
+    "latest_alpha_publication_race_attempts": 6
   },
   "blockers": {
     "android_alpha_ui_wired": false,
@@ -393,7 +402,11 @@
     "status": "node_lifecycle_source_complete_binary_proof_pending",
     "step": "34.2.4-source-lifecycle",
     "trusted_runtime_service_supervisor": true,
-    "upstream_android_configure_present": true
+    "upstream_android_configure_present": true,
+    "alpha_node_publication_race_repaired": true,
+    "alpha_404_gate_no_longer_red_workflow": true,
+    "public_release_proof_pending": true,
+    "latest_observed_alpha_preflight_http_status": 404
   },
   "node_runtime_direct_setup_device_proven": false,
   "node_runtime_direct_writable_download_forbidden": true,
@@ -476,8 +489,8 @@
     "version": "3.8.50"
   },
   "schema": 1,
-  "status": "node_http_404_recovery_source_ready_device_proof_pending",
-  "step": "34.10.17-node-http-404-recovery",
+  "status": "node_http_404_release_race_repaired_publication_proof_pending",
+  "step": "34.10.18-alpha-node-publication-race-repair",
   "validation": {
     "android_alpha_turn_device_verified": false,
     "node_http_404_source_contract_verified": true,
@@ -485,6 +498,7 @@
     "node_source_lane_contract_verified": true,
     "part31_contract_regressions": 0,
     "part34_4_gateway_transport_source_contract_verified": true,
-    "rust_compile_executed_in_runner": false
+    "rust_compile_executed_in_runner": false,
+    "alpha_node_publication_race_source_contract_verified": true
   }
 }

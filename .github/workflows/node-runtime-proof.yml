@@ -11,6 +11,7 @@ on:
       - "scripts/part34_node_execute_cross_build.sh"
       - "scripts/verify_node_cross_build_evidence.py"
       - "scripts/test_part34_10_17_node_404_recovery.py"
+      - "scripts/test_part34_10_18_alpha_node_publication_gate.py"
       - ".github/workflows/node-runtime-proof.yml"
 
 permissions:
@@ -119,6 +120,7 @@ jobs:
           python3 scripts/test_part34_10_compile_repairs.py
           python3 scripts/test_part34_10_15_node_delivery.py
           python3 scripts/test_part34_10_17_node_404_recovery.py
+          python3 scripts/test_part34_10_18_alpha_node_publication_gate.py
 
       - name: Cross-compile exact Node source for Android Bionic once
         if: steps.runtime_release.outputs.exists != 'true'

@@ -149,7 +149,7 @@ need(apk_verify, 'vibecoder-part34-apk-asset-diff.json', 'APK OmniRoute mismatch
 
 for token in (
     'full-alpha-package:',
-    'needs: [jcode-android-proof-build]',
+    'needs: [jcode-android-proof-build, node-runtime-ready]',
     'actions/setup-node@v6.4.0',
     'node-version: "24.19.0"',
     'package-manager-cache: false',
@@ -247,10 +247,10 @@ if project.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PROJECT_STATE stale first-compile pending flag')
 if project.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PROJECT_STATE Node proven host flag guard mismatch')
-if project.get('status') != 'node_http_404_recovery_source_ready_device_proof_pending':
-    raise SystemExit('Part 34.10.17 PROJECT_STATE status mismatch')
-if project.get('step') != '34.10.17-node-http-404-recovery':
-    raise SystemExit('Part 34.10.17 PROJECT_STATE step mismatch')
+if project.get('status') != 'node_http_404_release_race_repaired_publication_proof_pending':
+    raise SystemExit('Part 34.10.18 PROJECT_STATE status mismatch')
+if project.get('step') != '34.10.18-alpha-node-publication-race-repair':
+    raise SystemExit('Part 34.10.18 PROJECT_STATE step mismatch')
 expected_state={
  'portrait_layout':True,'drawer_old_chats':True,'drawer_reads_persisted_conversations_only':True,
  'drawer_mutates_conversation_store':False,'preview_placeholder_only':True,
@@ -288,10 +288,10 @@ if state.get('first_compile_failure_repaired_not_recompiled') is not False:
     raise SystemExit('Part 34.10 PART34_STATE stale first-compile pending flag')
 if state.get('node_proven_host_flag_guard') != '-mbranch-protection=standard':
     raise SystemExit('Part 34.10 PART34_STATE Node proven host flag guard mismatch')
-if state.get('status') != 'node_http_404_recovery_source_ready_device_proof_pending':
-    raise SystemExit('Part 34.10.17 PART34_STATE status mismatch')
-if state.get('step') != '34.10.17-node-http-404-recovery':
-    raise SystemExit('Part 34.10.17 PART34_STATE step mismatch')
+if state.get('status') != 'node_http_404_release_race_repaired_publication_proof_pending':
+    raise SystemExit('Part 34.10.18 PART34_STATE status mismatch')
+if state.get('step') != '34.10.18-alpha-node-publication-race-repair':
+    raise SystemExit('Part 34.10.18 PART34_STATE step mismatch')
 
 for container,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
     if container.get('bootstrap_catalog_retry_attempts') != 4:
@@ -416,12 +416,24 @@ for record,label in ((project,'PROJECT_STATE'),(state,'PART34_STATE')):
         raise SystemExit(f'Part 34.10.17 {label} Alpha public-runtime gate missing')
     if record.get('node_runtime_post_publish_alpha_dispatch') is not True:
         raise SystemExit(f'Part 34.10.17 {label} post-publish Alpha dispatch missing')
+    if record.get('alpha_node_release_race_repaired') is not True:
+        raise SystemExit(f'Part 34.10.18 {label} Alpha/Node release race repair missing')
+    if record.get('alpha_runtime_gate_nonfailing_until_public') is not True:
+        raise SystemExit(f'Part 34.10.18 {label} non-failing publication gate missing')
+    if record.get('alpha_runtime_gate_skips_packaging_when_unready') is not True:
+        raise SystemExit(f'Part 34.10.18 {label} unready Alpha skip contract missing')
+    if record.get('latest_alpha_publication_race_ci_commit') != 'ac92cf92bf5ab2345480a905d580a2b1b905db75':
+        raise SystemExit(f'Part 34.10.18 {label} observed race commit mismatch')
+    if record.get('latest_alpha_publication_race_http_status') != 404:
+        raise SystemExit(f'Part 34.10.18 {label} observed HTTP status mismatch')
+    if record.get('latest_alpha_publication_race_attempts') != 6:
+        raise SystemExit(f'Part 34.10.18 {label} observed attempt count mismatch')
     if record.get('node_runtime_http_404_device_retest_pending') is not True:
         raise SystemExit(f'Part 34.10.17 {label} must preserve pending device proof')
-    if record.get('status') != 'node_http_404_recovery_source_ready_device_proof_pending':
-        raise SystemExit(f'Part 34.10.17 {label} status mismatch')
-    if record.get('step') != '34.10.17-node-http-404-recovery':
-        raise SystemExit(f'Part 34.10.17 {label} step mismatch')
+    if record.get('status') != 'node_http_404_release_race_repaired_publication_proof_pending':
+        raise SystemExit(f'Part 34.10.18 {label} status mismatch')
+    if record.get('step') != '34.10.18-alpha-node-publication-race-repair':
+        raise SystemExit(f'Part 34.10.18 {label} step mismatch')
     if record.get('fresh_android_compile') is not False or record.get('full_alpha_apk_compiled') is not False:
         raise SystemExit(f'Part 34.10.14 {label} overclaims post-repair compile/full Alpha proof')
 
@@ -610,4 +622,4 @@ for forbidden in ('com.google.android.play:feature-delivery', 'SplitCompatApplic
         raise SystemExit('Part 34.10.15 Play runtime dependency survived: ' + forbidden)
 if (ROOT/'.github/workflows/android-play-bundle.yml').exists():
     raise SystemExit('Part 34.10.15 Play bundle workflow must be absent during development')
-print('Part 34.10.17 Node HTTP 404 recovery validation PASSED')
+print('Part 34.10.18 Alpha/Node publication-race recovery validation PASSED')

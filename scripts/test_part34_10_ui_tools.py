@@ -117,7 +117,7 @@ assert 'bash scripts/part34_10_strict_java_compile.sh' in workflow
 
 # Base Alpha stays on the last proven Jcode + OmniRoute lane; Node is downloaded during setup.
 assert 'full-alpha-package:' in workflow
-assert 'needs: [jcode-android-proof-build]' in workflow
+assert 'needs: [jcode-android-proof-build, node-runtime-ready]' in workflow
 assert 'actions/setup-node@v6.4.0' in workflow
 assert 'package-manager-cache: false' in workflow
 assert workflow.count('actions/download-artifact@v8.0.1') >= 1

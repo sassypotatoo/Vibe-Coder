@@ -53,17 +53,8 @@ for token in (
     if token not in node_workflow:
         die('node_publish_sequence_missing:' + token)
 
-# A user-facing full Alpha must not be published when the exact URL it will use
-# at first launch is already known to return 404.
-for token in (
-    'NODE_RUNTIME_TAG: "vibecoder-node-runtime-24.19.0-v31"',
-    'NODE_RUNTIME_ASSET: "vibecoder-node-runtime-arm64-v31.apk"',
-    'Require public Node runtime before publishing Alpha',
-    'https://github.com/${GITHUB_REPOSITORY}/releases/download/${NODE_RUNTIME_TAG}/${NODE_RUNTIME_ASSET}',
-    'curl --fail --location --silent --show-error --head',
-):
-    if token not in alpha_workflow:
-        die('alpha_runtime_preflight_missing:' + token)
+# The source-push Alpha/publication race is tested separately by Part 34.10.18.
+# Part 34.10.17 owns app-side bounded retry plus Node publication sequencing.
 
 # Guard against regressions to previously rejected delivery paths.
 for forbidden in (
